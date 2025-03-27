@@ -138,6 +138,56 @@ export const getCenterFinsPath = (config, finThickness, finBaseWidth, finSweepLe
           L ${config.centerX + halfThickness} ${finTopY - frontExtension} Z`;
 };
 
+// 3枚フィン用の左右のフィンを描画する関数
+export const getTriFinLeftRightPaths = (config, bodyWidth, finHeight, finBaseWidth, finSweepLength, finTipWidth) => {
+  const centerX = config.centerX;
+  const bottomY = config.height;
+  
+  // ボディの半径
+  const bodyRadius = bodyWidth / 2;
+  
+  // フィンの付け根の位置: ボディの中心から ±(ボディ径/2×1.73/2) の位置
+  const offset = bodyRadius * 1.73 / 2;
+  const leftFinRootX = centerX - offset;
+  const rightFinRootX = centerX + offset;
+  
+  // フィンの幅: 設定値 × 1.73 / 2
+  const adjustedFinHeight = finHeight * 1.73 / 2;
+  
+  // フィン付け根の上端位置
+  const finTopY = bottomY - finBaseWidth;
+  
+  // 後退代がマイナスの場合の処理を追加
+  let adjustedFinTopY, adjustedFinBottomY;
+  
+  if (finSweepLength >= 0) {
+    // 通常の正の後退代の場合
+    adjustedFinTopY = finTopY + finSweepLength;
+    adjustedFinBottomY = adjustedFinTopY + finTipWidth;
+  } else {
+    // 後退代がマイナスの場合（前進翼）
+    adjustedFinTopY = finTopY - Math.abs(finSweepLength);
+    adjustedFinBottomY = adjustedFinTopY + finTipWidth;
+  }
+  
+  // 左フィンのパス
+  const leftFinPath = `M ${leftFinRootX} ${finTopY}
+                       L ${leftFinRootX} ${bottomY}
+                       L ${leftFinRootX - adjustedFinHeight} ${adjustedFinBottomY}
+                       L ${leftFinRootX - adjustedFinHeight} ${adjustedFinTopY} Z`;
+  
+  // 右フィンのパス
+  const rightFinPath = `M ${rightFinRootX} ${finTopY}
+                        L ${rightFinRootX} ${bottomY}
+                        L ${rightFinRootX + adjustedFinHeight} ${adjustedFinBottomY}
+                        L ${rightFinRootX + adjustedFinHeight} ${adjustedFinTopY} Z`;
+  
+  return {
+    leftFin: leftFinPath,
+    rightFin: rightFinPath
+  };
+};
+
 // 姿勢表示用に中央のフィンを描画する関数
 export const getCenterFinsPathForAttitude = (x, y, params) => {
   // configが有効かどうかを確認

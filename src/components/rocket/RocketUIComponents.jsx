@@ -7,7 +7,7 @@ import {
   getParachutePath, getParachuteStringPaths, getWindArrow, getWindProfileArrows,
   metersToSvgX, metersToSvgY, getActualRocketDimensions, getSafeRotationTransform,
   getAnalysisViewBox, getDesignViewBox, getRocketTransform, getSafeValue,
-  getFinPaths
+  getFinPaths, getTriFinLeftRightPaths
 } from './RocketRendering';
 
 import { calculateWindSpeedAtHeight } from './RocketPhysics';
@@ -80,6 +80,9 @@ const WindAngleLimitVisualizer = ({ position, windSpeed, currentFlightPhase }) =
         
         <div>風上へ向かう:</div>
         <div>{isMovingUpwind ? "はい" : "いいえ"}</div>
+
+        <div>角度制限機能:</div>
+        <div>{rocketSim.enhancedAttitudeControl && rocketSim.windAngleLimitation ? "有効" : "無効"}</div>
         
         <div>飛行フェーズ:</div>
         <div>{currentFlightPhase || "初期化中"}</div>
@@ -219,9 +222,9 @@ const ResultsPopup = ({ results, onClose }) => {
                   {isAngleStableOK ? 'OK' : 'NG'}
                 </span>
               </div>
-              <div className="text-sm text-gray-600">
-                最大角度変化: {maxAngleChangePerDt2.toFixed(1)}° / 限界: ±10° (0.2秒間)
-              </div>
+                <div className="text-sm text-gray-600">
+                    最大角度変化: {maxAngleChangePerDt2.toFixed(1)}° / 限界: ±10° (0.2秒間)
+                </div>
             </div>
             
             <div className="mt-4 pt-2 border-t border-gray-300">
@@ -496,20 +499,18 @@ const ResultsPopup = ({ results, onClose }) => {
                     
                     {/* 3枚オプション - シンプルに無効化 */}
                     <div className="flex items-center">
-                      <label className="flex items-center opacity-60 cursor-not-allowed">
+                      <label className="flex items-center">
                         <input 
                           type="radio" 
                           value="3" 
-                          disabled={true}
+                          checked={rocketSim.finCount === 3} 
+                          onChange={() => rocketSim.setFinCount(3)} 
                           className="mr-2"
                         />
                         3枚
                       </label>
                       
-                      {/* 更新予定ラベル - 3枚の右側に配置 */}
-                      <span className="ml-2 text-xs text-blue-500 font-medium">
-                        更新予定
-                      </span>
+                      
                     </div>
                   </div>
                 </div>
@@ -581,19 +582,58 @@ const ResultsPopup = ({ results, onClose }) => {
             
             {/* ロケット表示部分 */}
             <div className="flex flex-col items-center justify-center bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <svg 
-                width={rocketSim.design?.width || 400} 
-                height={rocketSim.design?.height || 600} 
-                viewBox={rocketSim.getDesignViewBox ? rocketSim.getDesignViewBox() : "0 0 200 500"}
-                className="overflow-visible" 
-              >
-                <path d={rocketSim.getBodyPath ? rocketSim.getBodyPath(rocketSim.design || {}) : ""} fill="#9CA3AF" stroke="#374151" />
-                <path d={rocketSim.getCenterFinsPath ? rocketSim.getCenterFinsPath(rocketSim.design || {}) : ""} fill="#6B7280" stroke="#374151" />
-                <path d={rocketSim.getLeftFinPath ? rocketSim.getLeftFinPath(rocketSim.design || {}) : ""} fill="#6B7280" stroke="#374151" />
-                <path d={rocketSim.getRightFinPath ? rocketSim.getRightFinPath(rocketSim.design || {}) : ""} fill="#6B7280" stroke="#374151" />
-                <path d={rocketSim.getNosePath ? rocketSim.getNosePath(rocketSim.design || {}) : ""} fill="#D1D5DB" stroke="#374151" />
-              </svg>
-            </div>
+  <svg 
+    width={rocketSim.design?.width || 400} 
+    height={rocketSim.design?.height || 600} 
+    viewBox={rocketSim.getDesignViewBox ? rocketSim.getDesignViewBox() : "0 0 200 500"}
+    className="overflow-visible" 
+  >
+    {/* 3枚フィンの場合は先に左右フィンを描画してボディの後ろに表示 */}
+    {rocketSim.finCount === 3 && (
+      <>
+        <path 
+          d={getTriFinLeftRightPaths(
+            rocketSim.design || {}, 
+            rocketSim.bodyWidth, 
+            rocketSim.finHeight, 
+            rocketSim.finBaseWidth, 
+            rocketSim.finSweepLength, 
+            rocketSim.finTipWidth
+          ).leftFin} 
+          fill="#6B7280" stroke="#374151" 
+        />
+        <path 
+          d={getTriFinLeftRightPaths(
+            rocketSim.design || {}, 
+            rocketSim.bodyWidth, 
+            rocketSim.finHeight, 
+            rocketSim.finBaseWidth, 
+            rocketSim.finSweepLength, 
+            rocketSim.finTipWidth
+          ).rightFin} 
+          fill="#6B7280" stroke="#374151" 
+        />
+      </>
+    )}
+    
+    {/* 次にボディを描画 */}
+    <path d={rocketSim.getBodyPath ? rocketSim.getBodyPath(rocketSim.design || {}) : ""} fill="#9CA3AF" stroke="#374151" />
+    
+    {/* 中央フィンを描画 */}
+    <path d={rocketSim.getCenterFinsPath ? rocketSim.getCenterFinsPath(rocketSim.design || {}) : ""} fill="#6B7280" stroke="#374151" />
+    
+    {/* 4枚フィンの場合は左右フィンを中央フィンの後に描画 */}
+    {rocketSim.finCount === 4 && (
+      <>
+        <path d={rocketSim.getLeftFinPath ? rocketSim.getLeftFinPath(rocketSim.design || {}) : ""} fill="#6B7280" stroke="#374151" />
+        <path d={rocketSim.getRightFinPath ? rocketSim.getRightFinPath(rocketSim.design || {}) : ""} fill="#6B7280" stroke="#374151" />
+      </>
+    )}
+    
+    {/* 最後にノーズを描画 */}
+    <path d={rocketSim.getNosePath ? rocketSim.getNosePath(rocketSim.design || {}) : ""} fill="#D1D5DB" stroke="#374151" />
+  </svg>
+</div>
           </div>
         </div>
       );
@@ -756,147 +796,177 @@ const AnalysisTab = ({ rocketSim, getSafeValue }) => {
             
             {/* ロケット表示エリア - 縦向きロケットを中央に配置 */}
             <svg 
-              width={400} 
-              height={650}
-              viewBox="-200 -355 400 915"
-              className="border border-gray-200 bg-gray-50 rounded-lg"
-            >
-              {/* ロケットの全長を考慮して中央に配置 */}
-              <g transform={`translate(0, ${totalRocketLength + 100})`}> {/* 修正2: ロケットを上部に移動_____フレキシブルに対応できるように修正要 */}
-                {/* ロケットを全長に基づいて中央に配置するための計算と変換 */}
-                <g transform={`translate(0, ${-totalRocketLength / 2 - 50})`}>
-                  {/* ボディ - 座標系を底部(0,0)として上方向に負のy座標 */}
-                  <rect
-                    x={-(getSafeNumber(rocketSim.bodyWidth, 30) / 2)}
-                    y={-getSafeNumber(rocketSim.bodyHeight, 200)}
-                    width={getSafeNumber(rocketSim.bodyWidth, 30)}
-                    height={getSafeNumber(rocketSim.bodyHeight, 200)}
-                    fill="#9CA3AF"
-                    stroke="#374151"
-                    strokeWidth="1.5"
-                  />
-                  
-                  {/* ノーズ - ボディの上部に配置 */}
-                  {/* ノーズ - 選択した形状タイプに基づいて描画 */}
-{(() => {
-  const baseX1 = -(bodyWidth / 2);
-  const baseX2 = bodyWidth / 2;
-  const baseY = -bodyHeight;
-  const topX = 0;
-  const topY = baseY - noseHeight;
-  
-  let nosePath;
-  if (rocketSim.noseShape === 'cone') {
-    // 円錐ノーズ
-    nosePath = `M ${baseX1} ${baseY} L ${topX} ${topY} L ${baseX2} ${baseY} Z`;
-  } else if (rocketSim.noseShape === 'parabola') {
-    // 放物線ノーズ
-    const controlY = topY + noseHeight * 0.15;
-    nosePath = `M ${baseX1} ${baseY} 
-                C ${baseX1} ${controlY}, ${topX} ${topY}, ${topX} ${topY}
-                C ${topX} ${topY}, ${baseX2} ${controlY}, ${baseX2} ${baseY} Z`;
-  } else {
-    // オジブノーズ (デフォルト)
-    const halfWidth = bodyWidth / 2;
-    nosePath = `M ${baseX1} ${baseY}
-                Q ${baseX1 + halfWidth * 0.1} ${topY + noseHeight * 0.4}, ${topX} ${topY}
-                Q ${baseX2 - halfWidth * 0.1} ${topY + noseHeight * 0.4}, ${baseX2} ${baseY} Z`;
-  }
-  
-  return (
-    <path
-      d={nosePath}
-      fill="#D1D5DB"
-      stroke="#374151"
-      strokeWidth="1.5"
-    />
-  );
-})()}
-                  
-                  {/* フィン - 底部に配置 */}
-                  {/* 左フィン */}
-                  <path
-                    d={`M ${-(bodyWidth / 2)} ${-finBaseWidth}
-                        L ${-(bodyWidth / 2)} ${0}
-                        L ${-(bodyWidth / 2) - finHeight} ${-finBaseWidth + finSweepLength + finTipWidth}
-                        L ${-(bodyWidth / 2) - finHeight} ${-finBaseWidth + finSweepLength} Z`}
-                    fill="#6B7280"
-                    stroke="#374151"
-                    strokeWidth="1.5"
-                  />
-                  
-                  {/* 右フィン */}
-                  <path
-                    d={`M ${(bodyWidth / 2)} ${-finBaseWidth}
-                        L ${(bodyWidth / 2)} ${0}
-                        L ${(bodyWidth / 2) + finHeight} ${-finBaseWidth + finSweepLength + finTipWidth}
-                        L ${(bodyWidth / 2) + finHeight} ${-finBaseWidth + finSweepLength} Z`}
-                    fill="#6B7280"
-                    stroke="#374151"
-                    strokeWidth="1.5"
-                  />
-                  
-                  {/* センターフィン */}
-                  <rect
-                    x={-(finThickness / 2)}
-                    y={finSweepLength >= 0 
-                      ? -finBaseWidth 
-                      : -finBaseWidth - Math.abs(finSweepLength)}
-                    width={finThickness}
-                    height={finSweepLength >= 0 
-                      ? finBaseWidth + Math.max(0, finSweepLength + finTipWidth - finBaseWidth)
-                      : finBaseWidth + Math.abs(finSweepLength)}
-                    fill="#6B7280"
-                    stroke="#374151"
-                    strokeWidth="1.5"
-                  />
-                  
-                  {/* 重心マーカー - ノーズ先端からの距離を座標系に変換 */}
-                  <line
-                    x1={-60}
-                    y1={-(bodyHeight + noseHeight) + centerOfGravity}
-                    x2={60}
-                    y2={-(bodyHeight + noseHeight) + centerOfGravity}
-                    stroke="#EF4444"
-                    strokeWidth="2.5"
-                  />
-                  
-                  {/* 圧力中心マーカー */}
-                  <line
-                    x1={-60}
-                    y1={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
-                      totalRocketLength, 
-                      Math.max(0, getSafeNumber(safeCalculations.pressureCenter, 0))
-                    )}
-                    x2={60}
-                    y2={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
-                      totalRocketLength, 
-                      Math.max(0, getSafeNumber(safeCalculations.pressureCenter, 0))
-                    )}
-                    stroke="#3B82F6"
-                    strokeWidth="2"
-                    strokeDasharray="6,3"
-                  />
-                  
-                  {/* 静安定マージン用圧力中心マーカー */}
-                  <line
-                    x1={-60}
-                    y1={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
-                      totalRocketLength, 
-                      Math.max(0, getSafeNumber(safeCalculations.stabilityCenterOfPressure, 0))
-                    )}
-                    x2={60}
-                    y2={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
-                      totalRocketLength, 
-                      Math.max(0, getSafeNumber(safeCalculations.stabilityCenterOfPressure, 0))
-                    )}
-                    stroke="#10B981"
-                    strokeWidth="2"
-                    strokeDasharray="3,3"
-                  />
-                </g>
-              </g>
-            </svg>
+  width={400} 
+  height={650}
+  viewBox="-200 -355 400 915"
+  className="border border-gray-200 bg-gray-50 rounded-lg"
+>
+  {/* ロケットの全長を考慮して中央に配置 */}
+  <g transform={`translate(0, ${totalRocketLength + 100})`}> 
+    {/* ロケットを全長に基づいて中央に配置するための計算と変換 */}
+    <g transform={`translate(0, ${-totalRocketLength / 2 - 50})`}>
+      {/* 3枚フィンの場合は先に左右フィンを描画してボディの後ろに表示 */}
+      {rocketSim.finCount === 3 && (
+        <>
+          {/* 左フィン - 位置と幅を調整 */}
+          <path
+            d={`M ${-(bodyWidth / 2) * 1.73 / 2} ${-finBaseWidth}
+                L ${-(bodyWidth / 2) * 1.73 / 2} ${0}
+                L ${-(bodyWidth / 2) * 1.73 / 2 - finHeight * 1.73 / 2} ${-finBaseWidth + finSweepLength + finTipWidth}
+                L ${-(bodyWidth / 2) * 1.73 / 2 - finHeight * 1.73 / 2} ${-finBaseWidth + finSweepLength} Z`}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="1.5"
+          />
+          
+          {/* 右フィン - 位置と幅を調整 */}
+          <path
+            d={`M ${(bodyWidth / 2) * 1.73 / 2} ${-finBaseWidth}
+                L ${(bodyWidth / 2) * 1.73 / 2} ${0}
+                L ${(bodyWidth / 2) * 1.73 / 2 + finHeight * 1.73 / 2} ${-finBaseWidth + finSweepLength + finTipWidth}
+                L ${(bodyWidth / 2) * 1.73 / 2 + finHeight * 1.73 / 2} ${-finBaseWidth + finSweepLength} Z`}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="1.5"
+          />
+        </>
+      )}
+      
+      {/* ボディ - 座標系を底部(0,0)として上方向に負のy座標 */}
+      <rect
+        x={-(getSafeNumber(rocketSim.bodyWidth, 30) / 2)}
+        y={-getSafeNumber(rocketSim.bodyHeight, 200)}
+        width={getSafeNumber(rocketSim.bodyWidth, 30)}
+        height={getSafeNumber(rocketSim.bodyHeight, 200)}
+        fill="#9CA3AF"
+        stroke="#374151"
+        strokeWidth="1.5"
+      />
+      
+      {/* ノーズ - 選択した形状タイプに基づいて描画 */}
+      {(() => {
+        const baseX1 = -(bodyWidth / 2);
+        const baseX2 = bodyWidth / 2;
+        const baseY = -bodyHeight;
+        const topX = 0;
+        const topY = baseY - noseHeight;
+        
+        let nosePath;
+        if (rocketSim.noseShape === 'cone') {
+          // 円錐ノーズ
+          nosePath = `M ${baseX1} ${baseY} L ${topX} ${topY} L ${baseX2} ${baseY} Z`;
+        } else if (rocketSim.noseShape === 'parabola') {
+          // 放物線ノーズ
+          const controlY = topY + noseHeight * 0.15;
+          nosePath = `M ${baseX1} ${baseY} 
+                      C ${baseX1} ${controlY}, ${topX} ${topY}, ${topX} ${topY}
+                      C ${topX} ${topY}, ${baseX2} ${controlY}, ${baseX2} ${baseY} Z`;
+        } else {
+          // オジブノーズ (デフォルト)
+          const halfWidth = bodyWidth / 2;
+          nosePath = `M ${baseX1} ${baseY}
+                      Q ${baseX1 + halfWidth * 0.1} ${topY + noseHeight * 0.4}, ${topX} ${topY}
+                      Q ${baseX2 - halfWidth * 0.1} ${topY + noseHeight * 0.4}, ${baseX2} ${baseY} Z`;
+        }
+        
+        return (
+          <path
+            d={nosePath}
+            fill="#D1D5DB"
+            stroke="#374151"
+            strokeWidth="1.5"
+          />
+        );
+      })()}
+      
+      {/* 4枚フィンの場合のみ、左右フィンを表示 */}
+      {rocketSim.finCount === 4 && (
+        <>
+          {/* 左フィン */}
+          <path
+            d={`M ${-(bodyWidth / 2)} ${-finBaseWidth}
+                L ${-(bodyWidth / 2)} ${0}
+                L ${-(bodyWidth / 2) - finHeight} ${-finBaseWidth + finSweepLength + finTipWidth}
+                L ${-(bodyWidth / 2) - finHeight} ${-finBaseWidth + finSweepLength} Z`}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="1.5"
+          />
+          
+          {/* 右フィン */}
+          <path
+            d={`M ${(bodyWidth / 2)} ${-finBaseWidth}
+                L ${(bodyWidth / 2)} ${0}
+                L ${(bodyWidth / 2) + finHeight} ${-finBaseWidth + finSweepLength + finTipWidth}
+                L ${(bodyWidth / 2) + finHeight} ${-finBaseWidth + finSweepLength} Z`}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="1.5"
+          />
+        </>
+      )}
+      
+      {/* センターフィン - 共通で表示 */}
+      <rect
+        x={-(finThickness / 2)}
+        y={finSweepLength >= 0 
+          ? -finBaseWidth 
+          : -finBaseWidth - Math.abs(finSweepLength)}
+        width={finThickness}
+        height={finSweepLength >= 0 
+          ? finBaseWidth + Math.max(0, finSweepLength + finTipWidth - finBaseWidth)
+          : finBaseWidth + Math.abs(finSweepLength)}
+        fill="#6B7280"
+        stroke="#374151"
+        strokeWidth="1.5"
+      />
+      
+      {/* 重心マーカー - ノーズ先端からの距離を座標系に変換 */}
+      <line
+        x1={-60}
+        y1={-(bodyHeight + noseHeight) + centerOfGravity}
+        x2={60}
+        y2={-(bodyHeight + noseHeight) + centerOfGravity}
+        stroke="#EF4444"
+        strokeWidth="2.5"
+      />
+      
+      {/* 圧力中心マーカー */}
+      <line
+        x1={-60}
+        y1={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
+          totalRocketLength, 
+          Math.max(0, getSafeNumber(safeCalculations.pressureCenter, 0))
+        )}
+        x2={60}
+        y2={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
+          totalRocketLength, 
+          Math.max(0, getSafeNumber(safeCalculations.pressureCenter, 0))
+        )}
+        stroke="#3B82F6"
+        strokeWidth="2"
+        strokeDasharray="6,3"
+      />
+      
+      {/* 静安定マージン用圧力中心マーカー */}
+      <line
+        x1={-60}
+        y1={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
+          totalRocketLength, 
+          Math.max(0, getSafeNumber(safeCalculations.stabilityCenterOfPressure, 0))
+        )}
+        x2={60}
+        y2={-(getSafeNumber(rocketSim.bodyHeight, 200) + getSafeNumber(rocketSim.noseHeight, 50)) + Math.min(
+          totalRocketLength, 
+          Math.max(0, getSafeNumber(safeCalculations.stabilityCenterOfPressure, 0))
+        )}
+        stroke="#10B981"
+        strokeWidth="2"
+        strokeDasharray="3,3"
+      />
+    </g>
+  </g>
+</svg>
           </div>
         </div>
       </div>
@@ -905,7 +975,7 @@ const AnalysisTab = ({ rocketSim, getSafeValue }) => {
 };
     
     // シミュレーションタブコンポーネント - 修正版
-const SimulationTab = ({ rocketSim, debugView, setDebugView }) => {
+const SimulationTab = ({ rocketSim, debugView, setDebugView, devMode = false }) => {
   const position = rocketSim.getCurrentPosition();
   const windArrow = rocketSim.getWindArrow(rocketSim.windSpeed);
 
@@ -1128,6 +1198,79 @@ const getFinPathsForAttitude = (x, y, params) => {
                       L ${x + halfThickness} ${finBottomY + finExtension}
                       L ${x + halfThickness} ${finBottomY}
                       L ${x + halfThickness} ${finTopY - frontExtension} Z`;
+
+  return { leftFin, rightFin, centerFins };
+};
+
+// 3枚フィン用のフィンパス生成関数
+const getTriFinPathsForAttitude = (x, y, params, deflection = 0) => {
+  // 安全にパラメータを取得
+  const bodyWidth = getSafeNumber(params.bodyWidth, 30);
+  const finHeight = getSafeNumber(params.finHeight, 40);
+  const finBaseWidth = getSafeNumber(params.finBaseWidth, 30);
+  const finSweepLength = getSafeNumber(params.finSweepLength, 0);
+  const finTipWidth = getSafeNumber(params.finTipWidth, 20);
+  const finThickness = getSafeNumber(params.finThickness, 2);
+  
+  // ボディの中心からの左右のフィン位置のオフセット (sqrt(3)/2 = 1.73/2)
+  const offset = (bodyWidth / 2) * 1.73 / 2;
+  const leftFinRootX = x - offset;
+  const rightFinRootX = x + offset;
+  
+  // フィン高さを調整 (1.73/2倍)
+  const adjustedFinHeight = finHeight * 1.73 / 2;
+  
+  const finBottomY = y;
+  const finTopY = finBottomY - finBaseWidth;
+  
+  // たわみを考慮した修正
+  const deflectionAngle = deflection * Math.PI / 180; // ラジアンに変換
+  
+  // 後退代に応じた位置調整
+  let adjustedFinTopY, adjustedFinBottomY;
+  
+  if (finSweepLength >= 0) {
+    // 通常の正の後退代の場合
+    adjustedFinTopY = finTopY + finSweepLength;
+    adjustedFinBottomY = adjustedFinTopY + finTipWidth;
+  } else {
+    // 後退代がマイナスの場合（前進翼）
+    adjustedFinTopY = finTopY - Math.abs(finSweepLength);
+    adjustedFinBottomY = adjustedFinTopY + finTipWidth;
+  }
+  
+  // たわみを適用したフィン座標
+  const leftFinTipX = leftFinRootX - adjustedFinHeight * Math.cos(deflectionAngle);
+  const leftFinTipY = adjustedFinTopY + adjustedFinHeight * Math.sin(deflectionAngle);
+  const leftFinBottomTipX = leftFinRootX - adjustedFinHeight * Math.cos(deflectionAngle);
+  const leftFinBottomTipY = adjustedFinBottomY + adjustedFinHeight * Math.sin(deflectionAngle);
+  
+  const rightFinTipX = rightFinRootX + adjustedFinHeight * Math.cos(deflectionAngle);
+  const rightFinTipY = adjustedFinTopY + adjustedFinHeight * Math.sin(deflectionAngle);
+  const rightFinBottomTipX = rightFinRootX + adjustedFinHeight * Math.cos(deflectionAngle);
+  const rightFinBottomTipY = adjustedFinBottomY + adjustedFinHeight * Math.sin(deflectionAngle);
+
+  const leftFin = `M ${leftFinRootX} ${finTopY}
+                  L ${leftFinRootX} ${finBottomY}
+                  L ${leftFinBottomTipX} ${leftFinBottomTipY}
+                  L ${leftFinTipX} ${leftFinTipY} Z`;
+
+  const rightFin = `M ${rightFinRootX} ${finTopY}
+                  L ${rightFinRootX} ${finBottomY}
+                  L ${rightFinBottomTipX} ${rightFinBottomTipY}
+                  L ${rightFinTipX} ${rightFinTipY} Z`;
+
+  // 中央フィンの描画 - 後退代がマイナスの場合の処理を追加
+  const halfThickness = finThickness / 2;
+  let frontExtension = 0;
+  if (finSweepLength < 0) {
+    frontExtension = Math.abs(finSweepLength);
+  }
+  
+  const centerFins = `M ${x - halfThickness} ${finTopY - frontExtension}
+                    L ${x - halfThickness} ${finBottomY}
+                    L ${x + halfThickness} ${finBottomY}
+                    L ${x + halfThickness} ${finTopY - frontExtension} Z`;
 
   return { leftFin, rightFin, centerFins };
 };
@@ -1406,6 +1549,44 @@ const getFinPathsForAttitude = (x, y, params) => {
               </div>
             </div>
           </div>
+
+          {/* 姿勢制御設定セクション - 開発モード時のみ表示 */}
+          {devMode && (
+            <div className="mt-4">
+              <h5 className="font-medium mb-2">姿勢制御設定:</h5>
+              <div className="flex flex-col space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={rocketSim.enhancedAttitudeControl}
+                    onChange={(e) => rocketSim.setEnhancedAttitudeControl(e.target.checked)}
+                    disabled={rocketSim.isLaunched}
+                    className="mr-2"
+                  />
+                  <span>拡張姿勢制御を有効化</span>
+                  <span className="ml-2 text-xs text-gray-500">(風見効果など)</span>
+                </label>
+                
+                <label className={`flex items-center ${!rocketSim.enhancedAttitudeControl ? 'opacity-50' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={rocketSim.windAngleLimitation}
+                    onChange={(e) => rocketSim.setWindAngleLimitation(e.target.checked)}
+                    disabled={rocketSim.isLaunched || !rocketSim.enhancedAttitudeControl}
+                    className="mr-2"
+                  />
+                  <span>風向きによる角度制限 (90°制限)</span>
+                </label>
+              </div>
+              
+              <div className="text-sm text-gray-600 mt-1 pl-5">
+                <p>
+                  拡張姿勢制御ONで姿勢変化が見られます。
+                  角度制限ONで風上時に姿勢角が±90°までに制限されます。
+                </p>
+              </div>
+            </div>
+          )}
                 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="space-y-2">
@@ -1442,12 +1623,17 @@ const getFinPathsForAttitude = (x, y, params) => {
             >
               リセット
             </button>
-            <button
-              onClick={() => setDebugView(!debugView)}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              {debugView ? "通常表示" : "デバッグ表示"}
-            </button>
+            
+            {/* デバッグ表示ボタン - 開発モード時のみ表示 */}
+            {devMode && (
+              <button
+                onClick={() => setDebugView(!debugView)}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                {debugView ? "通常表示" : "デバッグ表示"}
+              </button>
+            )}
+            
             {rocketSim.completedFlights.length > 0 && (
               <span className="text-sm text-gray-600 ml-2 italic">
                 {rocketSim.completedFlights.length}回の軌跡を表示中
@@ -1668,58 +1854,204 @@ const getFinPathsForAttitude = (x, y, params) => {
               
               {/* ロケットとパラシュートの表示 - パラシュート表示を改良 */}
               {rocketSim.isLaunched && rocketSim.flightData.length > 0 && (
-                <>
-                  {/* パラシュート表示（パラシュート展開時のみ） */}
-                  {position.isParachuteEjected && (
-                    <>
-                      <path
-                        d={rocketSim.getParachuteStringPaths(
-                          rocketSim.metersToSvgX(position.physicsX), 
-                          rocketSim.metersToSvgY(position.physicsY), 
-                          position.isParachuteActive, 
-                          position.parachuteDeploymentProgress,
-                          position.rotation
-                        )}
-                        stroke="#374151"
-                        strokeWidth="1"
-                        fill="none"
-                      />
-                      <path
-                        d={rocketSim.getParachutePath(
-                          rocketSim.metersToSvgX(position.physicsX), 
-                          rocketSim.metersToSvgY(position.physicsY), 
-                          position.isParachuteActive, 
-                          position.parachuteDeploymentProgress,
-                          position.rotation
-                        )}
-                        fill={position.isParachuteActive ? "#FFB300" : "#9ca3af"}
-                        stroke="#374151"
-                        strokeWidth="2"
-                      />
-                    </>
-                  )}
+  <>
+    {/* パラシュート表示（パラシュート展開時のみ） */}
+    {position.isParachuteEjected && (
+      <>
+        <path
+          d={rocketSim.getParachuteStringPaths(
+            rocketSim.metersToSvgX(position.physicsX), 
+            rocketSim.metersToSvgY(position.physicsY), 
+            position.isParachuteActive, 
+            position.parachuteDeploymentProgress,
+            position.rotation
+          )}
+          stroke="#374151"
+          strokeWidth="1"
+          fill="none"
+        />
+        <path
+          d={rocketSim.getParachutePath(
+            rocketSim.metersToSvgX(position.physicsX), 
+            rocketSim.metersToSvgY(position.physicsY), 
+            position.isParachuteActive, 
+            position.parachuteDeploymentProgress,
+            position.rotation
+          )}
+          fill={position.isParachuteActive ? "#FFB300" : "#9ca3af"}
+          stroke="#374151"
+          strokeWidth="2"
+        />
+      </>
+    )}
 
-                  {/* ロケット */}
-                  <g transform={getSafeRotationTransform(position.rotation, rocketSim.metersToSvgX(position.physicsX), rocketSim.metersToSvgY(position.physicsY))}>
-                    <path d={getBodyPathForAttitude(rocketSim.metersToSvgX(position.physicsX), rocketSim.metersToSvgY(position.physicsY), rocketDisplayParams)} fill="#9CA3AF" stroke="#374151" />
-                    <path d={getFinPathsForAttitude(rocketSim.metersToSvgX(position.physicsX), rocketSim.metersToSvgY(position.physicsY), rocketDisplayParams, position.finDeflection).centerFins} fill="#6B7280" stroke="#374151" />
-                    <path d={getFinPathsForAttitude(rocketSim.metersToSvgX(position.physicsX), rocketSim.metersToSvgY(position.physicsY), rocketDisplayParams, position.finDeflection).leftFin} fill="#6B7280" stroke="#374151" />
-                    <path d={getFinPathsForAttitude(rocketSim.metersToSvgX(position.physicsX), rocketSim.metersToSvgY(position.physicsY), rocketDisplayParams, position.finDeflection).rightFin} fill="#6B7280" stroke="#374151" />
-                    <path d={getNosePathForAttitude(rocketSim.metersToSvgX(position.physicsX), rocketSim.metersToSvgY(position.physicsY), rocketDisplayParams)} fill="#D1D5DB" stroke="#374151" />
-                  </g>
-                </>
-              )}
+    {/* ロケット */}
+    <g transform={getSafeRotationTransform(position.rotation, rocketSim.metersToSvgX(position.physicsX), rocketSim.metersToSvgY(position.physicsY))}>
+      {/* 3枚フィンの場合は先に左右フィンを描画してボディの後ろに表示 */}
+      {rocketSim.finCount === 3 && (
+        <>
+          <path 
+            d={getTriFinPathsForAttitude(
+              rocketSim.metersToSvgX(position.physicsX), 
+              rocketSim.metersToSvgY(position.physicsY), 
+              rocketDisplayParams, 
+              position.finDeflection
+            ).leftFin} 
+            fill="#6B7280" 
+            stroke="#374151" 
+          />
+          <path 
+            d={getTriFinPathsForAttitude(
+              rocketSim.metersToSvgX(position.physicsX), 
+              rocketSim.metersToSvgY(position.physicsY), 
+              rocketDisplayParams, 
+              position.finDeflection
+            ).rightFin} 
+            fill="#6B7280" 
+            stroke="#374151" 
+          />
+        </>
+      )}
+      
+      {/* ボディ */}
+      <path 
+        d={getBodyPathForAttitude(
+          rocketSim.metersToSvgX(position.physicsX), 
+          rocketSim.metersToSvgY(position.physicsY), 
+          rocketDisplayParams
+        )} 
+        fill="#9CA3AF" 
+        stroke="#374151" 
+      />
+      
+      {/* 中央フィン（両方のフィン設定で共通） */}
+      <path 
+        d={rocketSim.finCount === 3 
+          ? getTriFinPathsForAttitude(
+              rocketSim.metersToSvgX(position.physicsX), 
+              rocketSim.metersToSvgY(position.physicsY), 
+              rocketDisplayParams, 
+              position.finDeflection
+            ).centerFins
+          : getFinPathsForAttitude(
+              rocketSim.metersToSvgX(position.physicsX), 
+              rocketSim.metersToSvgY(position.physicsY), 
+              rocketDisplayParams, 
+              position.finDeflection
+            ).centerFins
+        } 
+        fill="#6B7280" 
+        stroke="#374151" 
+      />
+      
+      {/* 4枚フィンの場合のみ左右フィン */}
+      {rocketSim.finCount === 4 && (
+        <>
+          <path 
+            d={getFinPathsForAttitude(
+              rocketSim.metersToSvgX(position.physicsX), 
+              rocketSim.metersToSvgY(position.physicsY), 
+              rocketDisplayParams, 
+              position.finDeflection
+            ).leftFin} 
+            fill="#6B7280" 
+            stroke="#374151" 
+          />
+          <path 
+            d={getFinPathsForAttitude(
+              rocketSim.metersToSvgX(position.physicsX), 
+              rocketSim.metersToSvgY(position.physicsY), 
+              rocketDisplayParams, 
+              position.finDeflection
+            ).rightFin} 
+            fill="#6B7280" 
+            stroke="#374151" 
+          />
+        </>
+      )}
+      
+      {/* ノーズ */}
+      <path 
+        d={getNosePathForAttitude(
+          rocketSim.metersToSvgX(position.physicsX), 
+          rocketSim.metersToSvgY(position.physicsY), 
+          rocketDisplayParams
+        )} 
+        fill="#D1D5DB" 
+        stroke="#374151" 
+      />
+    </g>
+  </>
+)}
               
               {/* 未発射時のロケット表示 */}
               {!rocketSim.isLaunched && (
-                <g transform={getSafeRotationTransform(rocketSim.launchAngle, 400, 550)}>
-                  <path d={getBodyPathForAttitude(400, 550, rocketDisplayParams)} fill="#9CA3AF" stroke="#374151" />
-                  <path d={getFinPathsForAttitude(400, 550, rocketDisplayParams).centerFins} fill="#6B7280" stroke="#374151" />
-                  <path d={getFinPathsForAttitude(400, 550, rocketDisplayParams).leftFin} fill="#6B7280" stroke="#374151" />
-                  <path d={getFinPathsForAttitude(400, 550, rocketDisplayParams).rightFin} fill="#6B7280" stroke="#374151" />
-                  <path d={getNosePathForAttitude(400, 550, rocketDisplayParams)} fill="#D1D5DB" stroke="#374151" />
-                </g>
-              )}
+  <g transform={getSafeRotationTransform(rocketSim.launchAngle, 400, 550)}>
+    {/* 3枚フィンの場合は先に左右フィンを描画してボディの後ろに表示 */}
+    {rocketSim.finCount === 3 && (
+      <>
+        <path 
+          d={getTriFinPathsForAttitude(
+            400, 
+            550, 
+            rocketDisplayParams
+          ).leftFin} 
+          fill="#6B7280" 
+          stroke="#374151" 
+        />
+        <path 
+          d={getTriFinPathsForAttitude(
+            400, 
+            550, 
+            rocketDisplayParams
+          ).rightFin} 
+          fill="#6B7280" 
+          stroke="#374151" 
+        />
+      </>
+    )}
+    
+    {/* ボディ */}
+    <path 
+      d={getBodyPathForAttitude(400, 550, rocketDisplayParams)} 
+      fill="#9CA3AF" 
+      stroke="#374151" 
+    />
+    
+    {/* 中央フィン（両方のフィン設定で共通） */}
+    <path 
+      d={rocketSim.finCount === 3 
+        ? getTriFinPathsForAttitude(400, 550, rocketDisplayParams).centerFins
+        : getFinPathsForAttitude(400, 550, rocketDisplayParams).centerFins
+      } 
+      fill="#6B7280" 
+      stroke="#374151" 
+    />
+    
+    {/* 4枚フィンの場合のみ左右フィン */}
+    {rocketSim.finCount === 4 && (
+      <>
+        <path 
+          d={getFinPathsForAttitude(400, 550, rocketDisplayParams).leftFin} 
+          fill="#6B7280" 
+          stroke="#374151" 
+        />
+        <path 
+          d={getFinPathsForAttitude(400, 550, rocketDisplayParams).rightFin} 
+          fill="#6B7280" 
+          stroke="#374151" 
+        />
+      </>
+    )}
+    
+    {/* ノーズ */}
+    <path 
+      d={getNosePathForAttitude(400, 550, rocketDisplayParams)} 
+      fill="#D1D5DB" 
+      stroke="#374151" 
+    />
+  </g>
+)}
                       
               {/* デバッグ情報表示 */}
               {debugView && (
@@ -1853,51 +2185,193 @@ const getFinPathsForAttitude = (x, y, params) => {
                 <line x1="0" y1="-90" x2="0" y2="90" stroke="#666" strokeWidth="1" strokeDasharray="3,2" />
                 
                 {/* ロケット - 姿勢角度を表示（重心を中心に回転） */}
-    <g transform={`rotate(${isNaN(position.rotation) ? 0 : position.rotation})`}>
-      {/* 重心を中心に配置するための調整 */}
-      <g transform={`translate(0, 0)`}>
-        {/* ロケット本体 - 重心が中心に来るように配置調整 */}
-        <g transform={`translate(0, ${scaledRocketNoseHeight + scaledRocketBodyHeight - scaledCogY})`}>
-          {/* ボディ */}
-          <rect
-            x={-attitudeRocketParams.bodyWidth / 2}
-            y={-attitudeRocketParams.bodyHeight}
-            width={attitudeRocketParams.bodyWidth}
-            height={attitudeRocketParams.bodyHeight}
-            fill="#9CA3AF"
-            stroke="#374151"
-            strokeWidth="0.5"
-          />
-          
-          {/* ノーズ */}
+                <g transform={`rotate(${isNaN(position.rotation) ? 0 : position.rotation})`}>
+  {/* 重心を中心に配置するための調整 */}
+  <g transform={`translate(0, 0)`}>
+    {/* ロケット本体 - 重心が中心に来るように配置調整 */}
+    <g transform={`translate(0, ${scaledRocketNoseHeight + scaledRocketBodyHeight - scaledCogY})`}>
+      {/* 3枚フィンの場合は先に左右フィンを描画してボディの後ろに表示 */}
+      {rocketSim.finCount === 3 && (
+        <>
+          {/* 左フィン - 位置と幅を調整 */}
           <path
-            d={getNosePathForAttitude(0, 0, {
-              ...attitudeRocketParams,
-              bodyHeight: attitudeRocketParams.bodyHeight,
-              noseShape: rocketSim.noseShape
-            })}
-            fill="#D1D5DB"
+            d={(() => {
+              const offset = (attitudeRocketParams.bodyWidth / 2) * 1.73 / 2;
+              const height = attitudeRocketParams.finHeight * 1.73 / 2;
+              const leftFinRootX = -offset;
+              const finTopY = -attitudeRocketParams.finBaseWidth;
+              const finBottomY = 0;
+              
+              // 後退代に応じた位置調整
+              let adjustedFinTopY, adjustedFinBottomY;
+              if (attitudeRocketParams.finSweepLength >= 0) {
+                adjustedFinTopY = finTopY + attitudeRocketParams.finSweepLength;
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              } else {
+                adjustedFinTopY = finTopY - Math.abs(attitudeRocketParams.finSweepLength);
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              }
+              
+              return `M ${leftFinRootX} ${finTopY}
+                    L ${leftFinRootX} ${finBottomY}
+                    L ${leftFinRootX - height} ${adjustedFinBottomY}
+                    L ${leftFinRootX - height} ${adjustedFinTopY} Z`;
+            })()}
+            fill="#6B7280"
             stroke="#374151"
             strokeWidth="0.5"
           />
           
-          {/* フィン */}
-          {(() => {
-            const fins = getFinPathsForAttitude(0, 0, attitudeRocketParams);
-            return (
-              <>
-                <path d={fins.leftFin} fill="#6B7280" stroke="#374151" strokeWidth="0.5" />
-                <path d={fins.rightFin} fill="#6B7280" stroke="#374151" strokeWidth="0.5" />
-                <path d={fins.centerFins} fill="#6B7280" stroke="#374151" strokeWidth="0.5" />
-              </>
-            );
-          })()}
-        </g>
+          {/* 右フィン - 位置と幅を調整 */}
+          <path
+            d={(() => {
+              const offset = (attitudeRocketParams.bodyWidth / 2) * 1.73 / 2;
+              const height = attitudeRocketParams.finHeight * 1.73 / 2;
+              const rightFinRootX = offset;
+              const finTopY = -attitudeRocketParams.finBaseWidth;
+              const finBottomY = 0;
+              
+              // 後退代に応じた位置調整
+              let adjustedFinTopY, adjustedFinBottomY;
+              if (attitudeRocketParams.finSweepLength >= 0) {
+                adjustedFinTopY = finTopY + attitudeRocketParams.finSweepLength;
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              } else {
+                adjustedFinTopY = finTopY - Math.abs(attitudeRocketParams.finSweepLength);
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              }
+              
+              return `M ${rightFinRootX} ${finTopY}
+                    L ${rightFinRootX} ${finBottomY}
+                    L ${rightFinRootX + height} ${adjustedFinBottomY}
+                    L ${rightFinRootX + height} ${adjustedFinTopY} Z`;
+            })()}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="0.5"
+          />
+        </>
+      )}
+      
+      {/* ボディ */}
+      <rect
+        x={-attitudeRocketParams.bodyWidth / 2}
+        y={-attitudeRocketParams.bodyHeight}
+        width={attitudeRocketParams.bodyWidth}
+        height={attitudeRocketParams.bodyHeight}
+        fill="#9CA3AF"
+        stroke="#374151"
+        strokeWidth="0.5"
+      />
+      
+      {/* ノーズ */}
+      <path
+        d={getNosePathForAttitude(0, 0, {
+          ...attitudeRocketParams,
+          bodyHeight: attitudeRocketParams.bodyHeight,
+          noseShape: rocketSim.noseShape
+        })}
+        fill="#D1D5DB"
+        stroke="#374151"
+        strokeWidth="0.5"
+      />
+      
+      {/* 4枚フィンの場合のみ左右フィン */}
+      {rocketSim.finCount === 4 && (
+        <>
+          <path
+            d={(() => {
+              const leftFinRootX = -attitudeRocketParams.bodyWidth / 2;
+              const finTopY = -attitudeRocketParams.finBaseWidth;
+              const finBottomY = 0;
+              
+              // 後退代に応じた位置調整
+              let adjustedFinTopY, adjustedFinBottomY;
+              if (attitudeRocketParams.finSweepLength >= 0) {
+                adjustedFinTopY = finTopY + attitudeRocketParams.finSweepLength;
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              } else {
+                adjustedFinTopY = finTopY - Math.abs(attitudeRocketParams.finSweepLength);
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              }
+              
+              return `M ${leftFinRootX} ${finTopY}
+                    L ${leftFinRootX} ${finBottomY}
+                    L ${leftFinRootX - attitudeRocketParams.finHeight} ${adjustedFinBottomY}
+                    L ${leftFinRootX - attitudeRocketParams.finHeight} ${adjustedFinTopY} Z`;
+            })()}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="0.5"
+          />
+          
+          <path
+            d={(() => {
+              const rightFinRootX = attitudeRocketParams.bodyWidth / 2;
+              const finTopY = -attitudeRocketParams.finBaseWidth;
+              const finBottomY = 0;
+              
+              // 後退代に応じた位置調整
+              let adjustedFinTopY, adjustedFinBottomY;
+              if (attitudeRocketParams.finSweepLength >= 0) {
+                adjustedFinTopY = finTopY + attitudeRocketParams.finSweepLength;
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              } else {
+                adjustedFinTopY = finTopY - Math.abs(attitudeRocketParams.finSweepLength);
+                adjustedFinBottomY = adjustedFinTopY + attitudeRocketParams.finTipWidth;
+              }
+              
+              return `M ${rightFinRootX} ${finTopY}
+                    L ${rightFinRootX} ${finBottomY}
+                    L ${rightFinRootX + attitudeRocketParams.finHeight} ${adjustedFinBottomY}
+                    L ${rightFinRootX + attitudeRocketParams.finHeight} ${adjustedFinTopY} Z`;
+            })()}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="0.5"
+          />
+        </>
+      )}
+      
+      {/* センターフィン - 共通で表示 */}
+      {(() => {
+        const halfThickness = attitudeRocketParams.finThickness / 2;
+        const finTopY = -attitudeRocketParams.finBaseWidth;
+        const finBottomY = 0;
         
-        {/* 重心位置のマーカー - 回転中心 */}
-        <circle cx="0" cy="0" r="2" fill="red" />
-      </g>
+        // 後退代がマイナスの場合の処理
+        let frontExtension = 0;
+        let finExtension = 0;
+        
+        if (attitudeRocketParams.finSweepLength < 0) {
+          // 前進翼の場合
+          frontExtension = Math.abs(attitudeRocketParams.finSweepLength);
+        }
+        
+        // フィンの後端がボディ後端より後ろに出る場合を計算
+        finExtension = Math.max(0, attitudeRocketParams.finSweepLength + 
+          attitudeRocketParams.finTipWidth - attitudeRocketParams.finBaseWidth);
+        
+        return (
+          <path
+            d={`M ${-halfThickness} ${finTopY - frontExtension}
+              L ${-halfThickness} ${finBottomY}
+              L ${-halfThickness} ${finBottomY + finExtension}
+              L ${halfThickness} ${finBottomY + finExtension}
+              L ${halfThickness} ${finBottomY}
+              L ${halfThickness} ${finTopY - frontExtension} Z`}
+            fill="#6B7280"
+            stroke="#374151"
+            strokeWidth="0.5"
+          />
+        );
+      })()}
     </g>
+    
+    {/* 重心位置のマーカー - 回転中心 */}
+    <circle cx="0" cy="0" r="2" fill="red" />
+  </g>
+</g>
     
     {/* 現在の角度表示 */}
     <text 

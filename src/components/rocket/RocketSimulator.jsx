@@ -15,7 +15,8 @@ import {
   calculateAerodynamicCenter, calculateStabilityCenterOfPressure,
   calculateStaticMargin, calculateFinDivergenceSpeed, calculateFinFlutterSpeed,
   formatFinDeflection, formatSpeedValue, calculateWindSpeedAtHeight,
-  calculateFlightPath
+  calculateFlightPath, ENHANCED_ATTITUDE_CONTROL, WIND_ANGLE_LIMITATION, 
+  PHYSICAL_ATTITUDE_CONTROL // 姿勢制御関連の定数をインポート
 } from './RocketPhysics';
 
 // SVG描画関連のインポート
@@ -31,6 +32,9 @@ import {
   WindAngleLimitVisualizer, ResultsPopup, LastFlightResults,
   ParameterSlider, DesignTab, AnalysisTab, SimulationTab
 } from './RocketUIComponents';
+
+// 開発モード設定 - 本番環境ではfalseに設定する
+const ENABLE_DEV_MODE = false; // ここを true/false で切り替える
 
 // ロケットデザインとシミュレーションを統合したカスタムフック
 const useRocketSimulator = () => {
@@ -76,8 +80,11 @@ const useRocketSimulator = () => {
   const [windProfile, setWindProfile] = useState("uniform");
   const [showWindArrows, setShowWindArrows] = useState(true);
   
-  // 2. rocketSimの初期状態が完全に構築されてから計算や描画を行うための状態
+  // rocketSimの初期状態が完全に構築されてから計算や描画を行うための状態
   const [isInitialized, setIsInitialized] = useState(false);
+
+  const [enhancedAttitudeControl, setEnhancedAttitudeControl] = useState(ENHANCED_ATTITUDE_CONTROL);
+  const [windAngleLimitation, setWindAngleLimitation] = useState(WIND_ANGLE_LIMITATION);
   
   // 初期化完了を検出するuseEffect
   useEffect(() => {
@@ -149,11 +156,13 @@ const useRocketSimulator = () => {
     weight,
     centerOfGravity,
     selectedMotor,
-    selectedParachute
+    selectedParachute,
+    finCount // finCountパラメータを追加
   }), [
     noseShape, noseHeight, bodyHeight, bodyWidth, 
     finHeight, finBaseWidth, finTipWidth, finThickness, finSweepLength,
-    finMaterial, weight, centerOfGravity, selectedMotor, selectedParachute
+    finMaterial, weight, centerOfGravity, selectedMotor, selectedParachute,
+    finCount // 依存配列にもfinCountを追加
   ]);
 
   // useRocketSimulator内で、noseShapeの状態変更を正しく伝播するように修正
@@ -639,7 +648,11 @@ const useRocketSimulator = () => {
         launchAngle, 
         windSpeed, 
         windProfile, // 風速プロファイルを追加
-        SVG_CONFIG
+        {
+          ...SVG_CONFIG,
+          enhancedAttitudeControl, // 拡張姿勢制御フラグを渡す
+          windAngleLimitation     // 風向きによる角度制限フラグを渡す
+        }
       );
       
       if (!flight?.data?.length) {
@@ -744,7 +757,7 @@ const useRocketSimulator = () => {
                 const maxDeflectionPercent = (maxFinDeflection / finHeight) * 100;
                 const isDeflectionOK = maxDeflectionPercent <= 3;
                 
-                // 姿勢安定性の判定結果 - 最大角度偏差を使用しない
+                // 姿勢安定性の判定結果 - シミュレーション結果から直接取得
                 const isAngleStableOK = flight.angleStability.isAngleStableOK;
                 const maxAngleChangePerDt2 = flight.angleStability.maxAngleChangePerDt2;
                 
@@ -833,7 +846,11 @@ const useRocketSimulator = () => {
       launchAngle, 
       windSpeed, 
       windProfile, // 風速プロファイルを追加
-      SVG_CONFIG
+      {
+        ...SVG_CONFIG,
+        enhancedAttitudeControl, // 拡張姿勢制御フラグを渡す
+        windAngleLimitation     // 風向きによる角度制限フラグを渡す
+      }
     );
 
     if (flight && flight.maxHeight > 0) {
@@ -993,6 +1010,12 @@ const useRocketSimulator = () => {
     calculateWindSpeedAtHeight,
     formatFinDeflection,
     getSafeValue,
+
+    // 姿勢制御設定
+    enhancedAttitudeControl,
+    setEnhancedAttitudeControl,
+    windAngleLimitation,
+    setWindAngleLimitation,
     
     // 操作関数
     handleLaunch, 
@@ -1011,6 +1034,15 @@ const useRocketSimulator = () => {
 const IntegratedRocketSimulator = () => {
   const [activeTab, setActiveTab] = useState(UI_CONFIG.defaultTab);
   const [debugView, setDebugView] = useState(false);
+  // 開発モードのステートを定数から初期化し、キーボードショートカットでの切り替えを無効化
+  const [devMode, setDevMode] = useState(ENABLE_DEV_MODE);
+
+  // 開発モードが有効な場合のみコンソールにログを出力（オプション）
+  useEffect(() => {
+    if (ENABLE_DEV_MODE) {
+      console.log('開発モードが有効です');
+    }
+  }, []);
 
   // ロケットシミュレーターフックを使用
   const rocketSim = useRocketSimulator();
@@ -1043,8 +1075,22 @@ const IntegratedRocketSimulator = () => {
       <div>
         {activeTab === 'design' && <DesignTab rocketSim={rocketSim} />}
         {activeTab === 'analysis' && <AnalysisTab rocketSim={rocketSim} getSafeValue={getSafeValue} />}
-        {activeTab === 'simulation' && <SimulationTab rocketSim={rocketSim} debugView={debugView} setDebugView={setDebugView} />}
+        {activeTab === 'simulation' && <SimulationTab rocketSim={rocketSim} debugView={debugView} setDebugView={setDebugView} devMode={devMode} />}
       </div>
+      
+      {/* 開発モード表示 - 開発モード時のみ表示 */}
+      {devMode && (
+        <div className="mt-2 py-1 px-2 bg-yellow-100 border border-yellow-300 rounded text-xs text-gray-700 flex items-center">
+          <span className="mr-2 px-1 py-0.5 bg-yellow-300 rounded-sm text-xs font-bold">開発モード</span>
+          <span>Ctrl+Shift+D でオン/オフ</span>
+          <button 
+            className="ml-auto px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded text-xs"
+            onClick={() => setDebugView(!debugView)}
+          >
+            {debugView ? "デバッグ表示オフ" : "デバッグ表示オン"}
+          </button>
+        </div>
+      )}
       
       {/* 著作権・免責事項フッター */}
       <div className="mt-8 pt-4 border-t border-gray-300 text-sm text-gray-600">
