@@ -1,9 +1,9 @@
 // メインのシミュレーターコンポーネント
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-
+import { useNavigate } from 'react-router-dom';
 // 定数とデータ定義のインポート
-import { 
-  SVG_CONFIG, MOTOR_THRUST_DATA, PARACHUTE_SIZES, FIN_MATERIALS, 
+import {
+  SVG_CONFIG, MOTOR_THRUST_DATA, PARACHUTE_SIZES, FIN_MATERIALS,
   NOSE_SHAPES, WIND_PROFILES, PHYSICAL_CONSTANTS, ANGLE_RESPONSE_DT,
   ANGLE_STEPS_PER_UPDATE, ANIMATION_SPEED, SLIDER_DEBOUNCE_TIME,
   mmToM, gToKg, UI_CONFIG, ANALYSIS_VIEW_CONFIG
@@ -11,11 +11,11 @@ import {
 
 // 物理計算関連のインポート
 import {
-  calculateProjectedArea, calculateVolume, calculateCenterOfPressure, 
+  calculateProjectedArea, calculateVolume, calculateCenterOfPressure,
   calculateAerodynamicCenter, calculateStabilityCenterOfPressure,
   calculateStaticMargin, calculateFinDivergenceSpeed, calculateFinFlutterSpeed,
   formatFinDeflection, formatSpeedValue, calculateWindSpeedAtHeight,
-  calculateFlightPath, ENHANCED_ATTITUDE_CONTROL, WIND_ANGLE_LIMITATION, 
+  calculateFlightPath, ENHANCED_ATTITUDE_CONTROL, WIND_ANGLE_LIMITATION,
   PHYSICAL_ATTITUDE_CONTROL // 姿勢制御関連の定数をインポート
 } from './RocketPhysics';
 
@@ -46,7 +46,7 @@ const useRocketSimulator = () => {
     bodyWidth: 31,
     finHeight: 58.5,
     finBaseWidth: 65,
-    finTipWidth: 25, 
+    finTipWidth: 25,
     finThickness: 1.5,
     finSweepLength: 95,
     finMaterial: "light_veneer",
@@ -73,39 +73,39 @@ const useRocketSimulator = () => {
   const [centerOfGravity, setCenterOfGravity] = useState(150);
   const [selectedMotor, setSelectedMotor] = useState("A8-3");
   const [selectedParachute, setSelectedParachute] = useState("φ300");
-  
+
   // Simulation parameters
   const [launchAngle, setLaunchAngle] = useState(0);
   const [windSpeed, setWindSpeed] = useState(0);
   const [windProfile, setWindProfile] = useState("uniform");
   const [showWindArrows, setShowWindArrows] = useState(true);
-  
+
   // rocketSimの初期状態が完全に構築されてから計算や描画を行うための状態
   const [isInitialized, setIsInitialized] = useState(false);
 
   const [enhancedAttitudeControl, setEnhancedAttitudeControl] = useState(ENHANCED_ATTITUDE_CONTROL);
   const [windAngleLimitation, setWindAngleLimitation] = useState(WIND_ANGLE_LIMITATION);
-  
+
   // 初期化完了を検出するuseEffect
   useEffect(() => {
     // すべての必要な値が初期化されたことを確認
     if (
-      noseShape && 
-      typeof noseHeight === 'number' && 
-      typeof bodyHeight === 'number' && 
+      noseShape &&
+      typeof noseHeight === 'number' &&
+      typeof bodyHeight === 'number' &&
       typeof bodyWidth === 'number' &&
-      typeof finHeight === 'number' && 
-      typeof finBaseWidth === 'number' && 
+      typeof finHeight === 'number' &&
+      typeof finBaseWidth === 'number' &&
       typeof finTipWidth === 'number' &&
-      typeof finThickness === 'number' && 
-      typeof finSweepLength === 'number' && 
-      typeof weight === 'number' && 
+      typeof finThickness === 'number' &&
+      typeof finSweepLength === 'number' &&
+      typeof weight === 'number' &&
       typeof centerOfGravity === 'number'
     ) {
       setIsInitialized(true);
     }
   }, [
-    noseShape, noseHeight, bodyHeight, bodyWidth, 
+    noseShape, noseHeight, bodyHeight, bodyWidth,
     finHeight, finBaseWidth, finTipWidth, finThickness, finSweepLength,
     weight, centerOfGravity
   ]);
@@ -132,7 +132,7 @@ const useRocketSimulator = () => {
   const [showResultsPopup, setShowResultsPopup] = useState(false);
   const [flightResults, setFlightResults] = useState(null);
   const [lastFlightResults, setLastFlightResults] = useState(null);
-  
+
   // 新しく追加した状態変数
   const [projectedAreas, setProjectedAreas] = useState(null);
   const [volumes, setVolumes] = useState(null);
@@ -159,7 +159,7 @@ const useRocketSimulator = () => {
     selectedParachute,
     finCount // finCountパラメータを追加
   }), [
-    noseShape, noseHeight, bodyHeight, bodyWidth, 
+    noseShape, noseHeight, bodyHeight, bodyWidth,
     finHeight, finBaseWidth, finTipWidth, finThickness, finSweepLength,
     finMaterial, weight, centerOfGravity, selectedMotor, selectedParachute,
     finCount // 依存配列にもfinCountを追加
@@ -170,7 +170,7 @@ const useRocketSimulator = () => {
     setNoseShape(shape);
     // その他の更新は依存関係に基づいてuseEffectで自動的に行われる
   };
-  
+
   // スライダーの動きをスムーズにするためのdebounce用ref
   const sliderTimeoutRef = useRef(null);
 
@@ -187,7 +187,7 @@ const useRocketSimulator = () => {
   const centerOfGravityInputRef = useRef(null);
   const launchAngleInputRef = useRef(null);
   const windSpeedInputRef = useRef(null);
-  
+
   // スムーズなスライダー操作のためのdebounce関数
   const debounce = (func) => {
     // デバウンスを実質的に無効化して直接値を更新
@@ -201,43 +201,43 @@ const useRocketSimulator = () => {
     // マウスイベントの処理関数
     const updateValueFromEvent = (event) => {
       if (!ref.current) return;
-      
+
       const rect = ref.current.getBoundingClientRect();
       const width = rect.width;
       const left = rect.left;
-      
+
       // マウス位置をスライダー内の相対位置(0～1)に変換
       let relativeX = (event.clientX - left) / width;
       // 範囲外の場合はクランプ(0～1に制限)
       relativeX = Math.max(0, Math.min(1, relativeX));
-      
+
       // スライダーの最小値と最大値
       const min = Number(ref.current.min);
       const max = Number(ref.current.max);
       const step = Number(ref.current.step) || 1;
-      
+
       // 相対位置から実際の値を計算
       let newValue = min + relativeX * (max - min);
-      
+
       // 設定されたstepに基づいて値を丸める
       if (step !== 0) {
         newValue = Math.round(newValue / step) * step;
       }
-      
+
       // 念のため、最終値を最小値と最大値の範囲内に収める
       newValue = Math.max(min, Math.min(max, newValue));
-      
+
       // 値を更新 - 常にNumberとして扱う
       setter(Number(newValue));
     };
-    
+
     return {
       // 値変更イベント(標準のonChange) - 明示的にNumberに変換
       onChange: (e) => setter(Number(e.target.value)),
-      
+
       // トラックのクリックイベント(スライダー上の任意の位置)
       onClick: updateValueFromEvent,
-      
+
       // スライダーのドラッグ開始
       onMouseDown: (startEvent) => {
         // ドキュメント全体でのマウス移動を監視
@@ -245,49 +245,49 @@ const useRocketSimulator = () => {
           moveEvent.preventDefault();
           updateValueFromEvent(moveEvent);
         };
-        
+
         // マウスボタンを離したときの処理
         const handleMouseUp = () => {
           document.removeEventListener('mousemove', handleMouseMove);
           document.removeEventListener('mouseup', handleMouseUp);
         };
-        
+
         // 最初のクリック位置で値を更新
         updateValueFromEvent(startEvent);
-        
+
         // ドキュメント全体にイベントリスナーを追加
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
       },
-      
+
       // タッチデバイス対応
       onTouchStart: (startEvent) => {
         if (!startEvent.touches[0]) return;
-        
+
         const handleTouchMove = (moveEvent) => {
           if (!moveEvent.touches[0]) return;
           moveEvent.preventDefault();
-          
+
           const touch = moveEvent.touches[0];
           const mockEvent = { clientX: touch.clientX, clientY: touch.clientY };
           updateValueFromEvent(mockEvent);
         };
-        
+
         const handleTouchEnd = () => {
           document.removeEventListener('touchmove', handleTouchMove);
           document.removeEventListener('touchend', handleTouchEnd);
         };
-        
+
         const touch = startEvent.touches[0];
         const mockEvent = { clientX: touch.clientX, clientY: touch.clientY };
         updateValueFromEvent(mockEvent);
-        
+
         document.addEventListener('touchmove', handleTouchMove, { passive: false });
         document.addEventListener('touchend', handleTouchEnd);
       }
     };
   }, []);
-  
+
   // Design display dimensions
   const design = useMemo(() => ({
     width: UI_CONFIG.designViewWidth,
@@ -300,12 +300,12 @@ const useRocketSimulator = () => {
     height: UI_CONFIG.analysisViewHeight,
     centerX: UI_CONFIG.analysisViewWidth / 2
   }), []);
-  
+
   // メートル単位からSVG座標への変換関数の修正版
   const convertMetersToSvgX = useCallback((meters) => {
     return metersToSvgX(meters, trajectoryScale);
   }, [trajectoryScale]);
-  
+
   const convertMetersToSvgY = useCallback((meters) => {
     return metersToSvgY(meters, trajectoryScale);
   }, [trajectoryScale]);
@@ -313,19 +313,19 @@ const useRocketSimulator = () => {
   // 実際のロケット寸法を計算するためのラッパー
   const getRocketDimensions = useCallback((config) => {
     return getActualRocketDimensions(
-      config, noseHeight, bodyHeight, 
+      config, noseHeight, bodyHeight,
       finSweepLength, finTipWidth, finBaseWidth
     );
   }, [noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth]);
-  
+
   // 視覚化のための風速高度分布矢印ラッパー
   const getWindArrows = useCallback((baseWindSpeed, profile) => {
     return getWindProfileArrows(
-      baseWindSpeed, profile, showWindArrows, 
+      baseWindSpeed, profile, showWindArrows,
       convertMetersToSvgY, calculateWindSpeedAtHeight
     );
   }, [showWindArrows, convertMetersToSvgY]);
-  
+
   // パラシュート描画関数のラッパー
   const getParachute = useCallback((x, y, isOpen, deploymentProgress, rotation) => {
     const rocketLength = mmToM(noseHeight + bodyHeight);
@@ -334,7 +334,7 @@ const useRocketSimulator = () => {
       rocketLength, selectedParachute, trajectoryScale
     );
   }, [noseHeight, bodyHeight, selectedParachute, trajectoryScale]);
-  
+
   const getParachuteStrings = useCallback((x, y, isOpen, deploymentProgress, rotation) => {
     const rocketLength = mmToM(noseHeight + bodyHeight);
     return getParachuteStringPaths(
@@ -342,22 +342,22 @@ const useRocketSimulator = () => {
       rocketLength, selectedParachute, trajectoryScale
     );
   }, [noseHeight, bodyHeight, selectedParachute, trajectoryScale]);
-  
+
   // viewBox計算関数のラッパー
   const computeDesignViewBox = useCallback(() => {
     return getDesignViewBox(
-      design, noseHeight, bodyHeight, 
+      design, noseHeight, bodyHeight,
       finHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth
     );
   }, [design, noseHeight, bodyHeight, finHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth]);
-  
+
   const computeAnalysisViewBox = useCallback(() => {
     return getAnalysisViewBox(
-      analysis, noseHeight, bodyHeight, 
+      analysis, noseHeight, bodyHeight,
       finHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth
     );
   }, [analysis, noseHeight, bodyHeight, finHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth]);
-  
+
   // 初期化後の計算値の更新
   useEffect(() => {
     if (!isInitialized) return;
@@ -369,7 +369,7 @@ const useRocketSimulator = () => {
     const acData = calculateAerodynamicCenter(simulationParams);
     const stabilityCpData = calculateStabilityCenterOfPressure(simulationParams);
     const margins = calculateStaticMargin(simulationParams);
-    
+
     // 状態を更新
     setProjectedAreas(areas);
     setVolumes(volumeData);
@@ -377,7 +377,7 @@ const useRocketSimulator = () => {
     setAerodynamicCenter(acData);
     setStabilityCenterOfPressure(stabilityCpData);
     setStaticMargins(margins);
-    
+
   }, [isInitialized, simulationParams]);
 
   // 動的に計算結果を更新する
@@ -389,7 +389,7 @@ const useRocketSimulator = () => {
     const acData = calculateAerodynamicCenter(simulationParams);
     const stabilityCpData = calculateStabilityCenterOfPressure(simulationParams);
     const margins = calculateStaticMargin(simulationParams);
-    
+
     // 状態を更新
     setProjectedAreas(areas);
     setVolumes(volumeData);
@@ -397,9 +397,9 @@ const useRocketSimulator = () => {
     setAerodynamicCenter(acData);
     setStabilityCenterOfPressure(stabilityCpData);
     setStaticMargins(margins);
-    
+
   }, [simulationParams]);
-  
+
   // 計算結果のキャッシュ
   const calculations = useMemo(() => {
     // 機体本体の高さ
@@ -408,25 +408,25 @@ const useRocketSimulator = () => {
     const finExtension = Math.max(0, finSweepLength + finTipWidth - finBaseWidth);
     // 全長は機体長 + フィン後端部分
     const totalHeight = actualRocketHeight + finExtension;
-    
+
     // 圧力中心位置と空力中心位置（新しい計算結果を使用）
     const cp = pressureCenter?.centerOfPressure || (totalHeight * 0.7);
     const ac = aerodynamicCenter?.aerodynamicCenter || (totalHeight * 0.65);
     const stabilityCp = stabilityCenterOfPressure?.stabilityCenterOfPressure || (totalHeight * 0.6);
-    
+
     // 姿勢安定性マージン - 重心位置との距離
     const standardMargin = staticMargins?.standardStaticMargin || ((cp - centerOfGravity) / bodyWidth);
     const stabilityMargin = staticMargins?.stabilityStaticMargin || ((stabilityCp - centerOfGravity) / bodyWidth);
-    
+
     // 新しい計算関数を使用してフィン限界速度を計算
     const rocketParams = {
-      noseHeight, bodyHeight, bodyWidth, finHeight, finBaseWidth, finTipWidth, 
+      noseHeight, bodyHeight, bodyWidth, finHeight, finBaseWidth, finTipWidth,
       finThickness, finSweepLength, finMaterial, centerOfGravity, weight
     };
-    
+
     const finDivergenceSpeed = calculateFinDivergenceSpeed(rocketParams);
     const finFlutterSpeed = calculateFinFlutterSpeed(rocketParams);
-    
+
     return {
       totalHeight: totalHeight,
       actualRocketHeight: actualRocketHeight,
@@ -442,9 +442,9 @@ const useRocketSimulator = () => {
       finDivergenceSpeedDisplay: formatSpeedValue(finDivergenceSpeed),
       finFlutterSpeedDisplay: formatSpeedValue(finFlutterSpeed)
     };
-  }, [noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth, centerOfGravity, 
-     pressureCenter, aerodynamicCenter, stabilityCenterOfPressure, staticMargins, 
-     finHeight, finThickness, finMaterial, weight]);
+  }, [noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth, centerOfGravity,
+    pressureCenter, aerodynamicCenter, stabilityCenterOfPressure, staticMargins,
+    finHeight, finThickness, finMaterial, weight]);
 
   // 現在の飛行フェーズを取得する関数
   const getCurrentFlightPhase = useCallback(() => {
@@ -476,7 +476,7 @@ const useRocketSimulator = () => {
 
     // 発射台からの距離を計算
     const distanceFromStart = Math.sqrt(
-      currentData.physicsX * currentData.physicsX + 
+      currentData.physicsX * currentData.physicsX +
       currentData.physicsY * currentData.physicsY
     );
 
@@ -552,11 +552,11 @@ const useRocketSimulator = () => {
       rotation: isNaN(currentData.omega) ? launchAngle : (currentData.omega * 180 / Math.PI),
       isParachuteEjected: currentData.isParachuteEjected || false,
       isParachuteActive: currentData.isParachuteActive || false,
-      parachuteDeploymentProgress: isNaN(currentData.parachuteDeploymentProgress) ? 0 : 
+      parachuteDeploymentProgress: isNaN(currentData.parachuteDeploymentProgress) ? 0 :
         (currentData.parachuteDeploymentProgress || 0),
       torque: isNaN(currentData.torque) ? 0 : (currentData.torque || 0),
       angleChangePerDt2: isNaN(currentData.angleChangePerDt2) ? 0 : (currentData.angleChangePerDt2 || 0),
-      horizontalDistance: isNaN(currentData.horizontalDistance) ? 0 : 
+      horizontalDistance: isNaN(currentData.horizontalDistance) ? 0 :
         (currentData.horizontalDistance || Math.abs(isNaN(currentData.physicsX) ? 0 : currentData.physicsX) || 0),
       finDeflection: isNaN(currentData.finDeflection) ? 0 : (currentData.finDeflection || 0),
       effectiveWindSpeed: isNaN(currentData.effectiveWindSpeed) ? windSpeed : (currentData.effectiveWindSpeed || windSpeed)
@@ -616,7 +616,7 @@ const useRocketSimulator = () => {
     setCurrentMaxFinDeflection(0);
 
     // 過去の飛行軌跡をクリア
-    setCompletedFlights([]); 
+    setCompletedFlights([]);
 
     // モーターに応じた適切なスケールを設定
     const stableScale = getInitialScaleForMotor(selectedMotor);
@@ -644,9 +644,9 @@ const useRocketSimulator = () => {
     try {
       // 風速プロファイルを引数として渡す
       const flight = calculateFlightPath(
-        simulationParams, 
-        launchAngle, 
-        windSpeed, 
+        simulationParams,
+        launchAngle,
+        windSpeed,
         windProfile, // 風速プロファイルを追加
         {
           ...SVG_CONFIG,
@@ -654,7 +654,7 @@ const useRocketSimulator = () => {
           windAngleLimitation     // 風向きによる角度制限フラグを渡す
         }
       );
-      
+
       if (!flight?.data?.length) {
         console.error('フライトデータが空です');
         return;
@@ -666,14 +666,14 @@ const useRocketSimulator = () => {
       console.log(`最高到達高度: ${flight.maxHeight.toFixed(2)}m, 最高速度: ${flight.maxSpeed.toFixed(2)}m/s, 最大水平距離: ${flight.maxDistance.toFixed(2)}m`);
       console.log(`最大フィンたわみ量: ${flight.maxFinDeflection.toFixed(4)}mm`);
       console.log(`姿勢安定性: 最大角度変化量=${flight.angleStability.maxAngleChangePerDt2.toFixed(2)}°`);
-      
+
       // キーポイントを保存
       setKeyPoints(flight.keyPoints);
 
       setFlightData(flight.data);
       setIsLaunched(true);
       setCurrentTime(0);
-      
+
       // 初期値を明示的に設定
       setCurrentHeight(initialData.height || 0);
       setCurrentSpeed(initialData.vy || 0);
@@ -687,7 +687,7 @@ const useRocketSimulator = () => {
       // アニメーション開始時間を記録
       const startTime = performance.now();
       let firstFrame = true;
-      
+
       const animate = (timestamp) => {
         // 初回フレームの特別処理
         if (firstFrame) {
@@ -695,42 +695,42 @@ const useRocketSimulator = () => {
           requestAnimationFrame(animate);
           return;
         }
-        
+
         try {
           // アニメーション開始からの累積時間を計算（ANIMATION_SPEEDで調整）
           const elapsed = Math.max(0, (timestamp - startTime) / 1000 * ANIMATION_SPEED);
-          
+
           // シミュレーションデータのインデックスを計算 - Math.maxを追加して負のインデックスを防止
           const timeIndex = Math.max(0, Math.min(Math.floor(elapsed / 0.02), flight.data.length - 1));
-          
+
           // 追加のデバッグログ - 100フレームごとに状態を記録
           if (timeIndex % 100 === 0) {
             console.log(`Animation frame: time=${elapsed.toFixed(2)}s, index=${timeIndex}, total=${flight.data.length}`);
           }
-          
+
           // データの安全性チェック
           if (timeIndex >= 0 && timeIndex < flight.data.length) {
             const currentData = flight.data[timeIndex];
-            
+
             if (currentData && typeof currentData === 'object') {
               // NaNチェックを追加
               setCurrentTime(elapsed);
               setCurrentHeight(isNaN(currentData.height) ? 0 : currentData.height || 0);
               setCurrentSpeed(isNaN(currentData.vy) ? 0 : currentData.vy || 0);
-              setCurrentDistance(isNaN(currentData.horizontalDistance) ? 0 : 
+              setCurrentDistance(isNaN(currentData.horizontalDistance) ? 0 :
                 (currentData.horizontalDistance || Math.abs(isNaN(currentData.physicsX) ? 0 : currentData.physicsX) || 0));
-              
+
               // フィンたわみ量のNaNチェック
               const finDeflection = isNaN(currentData.finDeflection) ? 0 : currentData.finDeflection || 0;
               setCurrentFinDeflection(finDeflection);
-              
+
               // 最大値の安全な更新
               setCurrentMaxHeight(prev => Math.max(prev, isNaN(currentData.height) ? 0 : currentData.height || 0));
-              setCurrentMaxSpeed(prev => Math.max(prev, isNaN(currentData.speedMagnitude) ? 0 : 
+              setCurrentMaxSpeed(prev => Math.max(prev, isNaN(currentData.speedMagnitude) ? 0 :
                 Math.abs(currentData.speedMagnitude) || 0));
-              setCurrentMaxDistance(prev => Math.max(prev, isNaN(currentData.physicsX) ? 0 : 
+              setCurrentMaxDistance(prev => Math.max(prev, isNaN(currentData.physicsX) ? 0 :
                 Math.abs(currentData.physicsX) || 0));
-              
+
               // 最大フィンたわみ量の更新
               setCurrentMaxFinDeflection(prev => Math.max(prev, finDeflection));
 
@@ -741,14 +741,14 @@ const useRocketSimulator = () => {
               } else {
                 // アニメーション終了 - 最終フレームに到達した時だけ結果を表示
                 console.log('アニメーション完了: 最終インデックス到達');
-                
+
                 // シミュレーションデータから最大値を直接計算（状態変数に依存せず確実に取得）
                 const maxHeight = Math.max(...flight.data.map(d => isNaN(d.height) ? 0 : d.height || 0));
-                const maxSpeed = Math.max(...flight.data.map(d => isNaN(d.speedMagnitude) ? 0 : 
+                const maxSpeed = Math.max(...flight.data.map(d => isNaN(d.speedMagnitude) ? 0 :
                   Math.abs(d.speedMagnitude) || 0));
-                const maxDistance = Math.max(...flight.data.map(d => isNaN(d.physicsX) ? 0 : 
+                const maxDistance = Math.max(...flight.data.map(d => isNaN(d.physicsX) ? 0 :
                   Math.abs(d.physicsX) || 0));
-                const maxFinDeflection = Math.max(...flight.data.map(d => isNaN(d.finDeflection) ? 0 : 
+                const maxFinDeflection = Math.max(...flight.data.map(d => isNaN(d.finDeflection) ? 0 :
                   d.finDeflection || 0));
 
                 // 飛行結果の評価（直接計算した最大値を使用）
@@ -756,11 +756,11 @@ const useRocketSimulator = () => {
                 const isFlutterOK = maxSpeed < flight.calculations.finFlutterSpeed;
                 const maxDeflectionPercent = (maxFinDeflection / finHeight) * 100;
                 const isDeflectionOK = maxDeflectionPercent <= 3;
-                
+
                 // 姿勢安定性の判定結果 - シミュレーション結果から直接取得
                 const isAngleStableOK = flight.angleStability.isAngleStableOK;
                 const maxAngleChangePerDt2 = flight.angleStability.maxAngleChangePerDt2;
-                
+
                 // 総合判定は全てのチェックをパスする必要がある
                 const isOverallOK = isDivergenceOK && isFlutterOK && isDeflectionOK && isAngleStableOK;
 
@@ -810,13 +810,13 @@ const useRocketSimulator = () => {
 
                 setCompletedFlights(prevFlights => [...prevFlights, completedFlightData]);
                 setIsLaunched(false);
-              }              
+              }
             }
           }
         } catch (error) {
           // エラーが発生した場合は記録して次のフレームを試行
           console.error('Animation frame error:', error);
-          
+
           // 重大なエラーでなければ次のフレームを継続
           if (timeIndex < flight.data.length - 1) {
             const id = requestAnimationFrame(animate);
@@ -827,7 +827,7 @@ const useRocketSimulator = () => {
           }
         }
       };
-      
+
       // アニメーション開始
       requestAnimationFrame(animate);
     } catch (error) {
@@ -842,9 +842,9 @@ const useRocketSimulator = () => {
 
     // 風速プロファイルを引数として渡す
     const flight = calculateFlightPath(
-      simulationParams, 
-      launchAngle, 
-      windSpeed, 
+      simulationParams,
+      launchAngle,
+      windSpeed,
       windProfile, // 風速プロファイルを追加
       {
         ...SVG_CONFIG,
@@ -855,47 +855,47 @@ const useRocketSimulator = () => {
 
     if (flight && flight.maxHeight > 0) {
       const availableHeight = SVG_CONFIG.height - SVG_CONFIG.groundLevel;
-      
+
       // 改良：より高いベース高さを設定
       const baseHeights = {
         '1/2A6-2': 100,
         'A8-3': 150,
         'B6-4': 200
       };
-      
+
       const expectedBaseHeight = baseHeights[simulationParams.selectedMotor] || 150;
       const targetHeight = Math.max(flight.maxHeight * 1.3, expectedBaseHeight);
-      
+
       const minHorizontalDistance = expectedBaseHeight * 0.9;
       const maxDistance = Math.max(flight.maxDistance || 0, minHorizontalDistance);
-      
+
       // スケール計算
       const verticalScale = availableHeight / targetHeight;
       const horizontalScale = (SVG_CONFIG.width * 0.9) / (maxDistance * 2 || 1);
-      
+
       const motorPowerFactor = {
         '1/2A6-2': 0.45,
         'A8-3': 0.35,
         'B6-4': 0.25
       };
-      
+
       const powerFactor = motorPowerFactor[simulationParams.selectedMotor] || 0.35;
-      
+
       // 最小/最大スケール値の調整
       const minScale = 10;
       const maxScale = 24;
-      
+
       const rawScale = Math.min(verticalScale, horizontalScale) * powerFactor;
       // 最終スケールを調整 - 必ず最小スケールを適用
       const finalScale = Math.max(minScale, Math.min(maxScale, rawScale));
-      
+
       // スケール設定
       setTrajectoryScale(finalScale);
-      
+
       // ロケットスケールをさらに小さく
       const baseRocketScale = 0.03;
       setRocketScale(baseRocketScale * powerFactor);
-      
+
       console.log(`パラメータ更新: モーター=${simulationParams.selectedMotor}, 高度=${flight.maxHeight.toFixed(1)}m, スケール=${finalScale.toFixed(2)}`);
     }
   }, [isLaunched, launchAngle, windSpeed, windProfile, simulationParams]);
@@ -905,10 +905,10 @@ const useRocketSimulator = () => {
     // コンポーネント初期マウント時に強制的にスケールを設定
     const initialScale = getInitialScaleForMotor(selectedMotor);
     const initialRocketScale = 0.03 * getMotorPowerFactor(selectedMotor);
-    
+
     setTrajectoryScale(initialScale);
     setRocketScale(initialRocketScale);
-    
+
     console.log(`初期表示: スケール=${initialScale}, ロケットスケール=${initialRocketScale}`);
   }, []); // 空の依存配列で初回のみ実行
 
@@ -938,36 +938,36 @@ const useRocketSimulator = () => {
     finSweepLength, setFinSweepLength: debounce(setFinSweepLength, SLIDER_DEBOUNCE_TIME),
     finMaterial, setFinMaterial,
     finCount, setFinCount,
-    
+
     // 分析パラメータ
     weight, setWeight: debounce(setWeight, SLIDER_DEBOUNCE_TIME),
     centerOfGravity, setCenterOfGravity: debounce(setCenterOfGravity, SLIDER_DEBOUNCE_TIME),
     selectedMotor, setSelectedMotor,
     selectedParachute, setSelectedParachute,
-    
+
     // シミュレーションパラメータ
     launchAngle, setLaunchAngle: debounce(setLaunchAngle, SLIDER_DEBOUNCE_TIME),
     windSpeed, setWindSpeed: debounce(setWindSpeed, SLIDER_DEBOUNCE_TIME),
     windProfile, setWindProfile,
     showWindArrows, setShowWindArrows,
-    
+
     // シミュレーション状態
     isLaunched, setIsLaunched,
     flightData, currentTime,
     currentHeight, currentSpeed, currentDistance, currentFinDeflection,
     currentMaxHeight, currentMaxSpeed, currentMaxDistance, currentMaxFinDeflection,
     completedFlights, keyPoints,
-    
+
     // 表示設定
     design, analysis,
     trajectoryScale, rocketScale,
-    
+
     // 新しい計算結果
     projectedAreas, volumes, pressureCenter, aerodynamicCenter, stabilityCenterOfPressure, staticMargins,
-    
+
     // 計算結果
     calculations,
-    
+
     // 初期化状態
     isInitialized,
 
@@ -984,7 +984,7 @@ const useRocketSimulator = () => {
     centerOfGravityInputRef, handleCenterOfGravity: handleSliderChange(centerOfGravityInputRef, setCenterOfGravity),
     launchAngleInputRef, handleLaunchAngle: handleSliderChange(launchAngleInputRef, setLaunchAngle),
     windSpeedInputRef, handleWindSpeed: handleSliderChange(windSpeedInputRef, setWindSpeed),
-    
+
     // 描画関数 - 外部のレンダリング関数を呼び出すためのラッパー
     getNosePath: (config) => getNosePath(config, noseShape, noseHeight, bodyWidth, bodyHeight),
     getBodyPath: (config) => getBodyPath(config, bodyHeight, bodyWidth),
@@ -999,11 +999,11 @@ const useRocketSimulator = () => {
     // 座標変換
     metersToSvgX: convertMetersToSvgX,
     metersToSvgY: convertMetersToSvgY,
-    
+
     // viewBox計算
     getDesignViewBox: computeDesignViewBox,
     getAnalysisViewBox: computeAnalysisViewBox,
-    
+
     // ユーティリティ関数
     getActualRocketDimensions: getRocketDimensions,
     getCurrentPosition,
@@ -1016,9 +1016,9 @@ const useRocketSimulator = () => {
     setEnhancedAttitudeControl,
     windAngleLimitation,
     setWindAngleLimitation,
-    
+
     // 操作関数
-    handleLaunch, 
+    handleLaunch,
     handleReset,
 
     // 結果表示関連
@@ -1047,43 +1047,55 @@ const IntegratedRocketSimulator = () => {
   // ロケットシミュレーターフックを使用
   const rocketSim = useRocketSimulator();
 
+  const navigate = useNavigate();
+  // ログアウト処理
+  const handleLogout = () => {
+    localStorage.removeItem('isLoggedIn'); // ログイン状態を削除
+    navigate('/login'); // ログイン画面にリダイレクト
+  }
+
   return (
-    <div className="max-w-6xl mx-auto p-4">
+    <div className="relative max-w-6xl mx-auto p-4">
       <h2 className="text-2xl font-bold mb-4">AVIENTER_2D</h2>
-      
+      <button
+        onClick={handleLogout}
+        className="absolute top-4 right-4 px-4 py-2 border border-gray text-gray font-bold rounded hover:bg-white hover:text-black-300 transition z-10"
+      >
+        ログアウト
+      </button>
       <div className="flex border-b mb-6">
-        <button 
+        <button
           className={`px-6 py-3 font-medium ${activeTab === 'design' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg`}
           onClick={() => setActiveTab('design')}
         >
           形状設計
         </button>
-        <button 
+        <button
           className={`px-6 py-3 font-medium ${activeTab === 'analysis' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
           onClick={() => setActiveTab('analysis')}
         >
           重量・空力特性
         </button>
-        <button 
+        <button
           className={`px-6 py-3 font-medium ${activeTab === 'simulation' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
           onClick={() => setActiveTab('simulation')}
         >
           飛行シミュレーション
         </button>
       </div>
-      
+
       <div>
         {activeTab === 'design' && <DesignTab rocketSim={rocketSim} />}
         {activeTab === 'analysis' && <AnalysisTab rocketSim={rocketSim} getSafeValue={getSafeValue} />}
         {activeTab === 'simulation' && <SimulationTab rocketSim={rocketSim} debugView={debugView} setDebugView={setDebugView} devMode={devMode} />}
       </div>
-      
+
       {/* 開発モード表示 - 開発モード時のみ表示 */}
       {devMode && (
         <div className="mt-2 py-1 px-2 bg-yellow-100 border border-yellow-300 rounded text-xs text-gray-700 flex items-center">
           <span className="mr-2 px-1 py-0.5 bg-yellow-300 rounded-sm text-xs font-bold">開発モード</span>
           <span>Ctrl+Shift+D でオン/オフ</span>
-          <button 
+          <button
             className="ml-auto px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded text-xs"
             onClick={() => setDebugView(!debugView)}
           >
@@ -1091,7 +1103,7 @@ const IntegratedRocketSimulator = () => {
           </button>
         </div>
       )}
-      
+
       {/* 著作権・免責事項フッター */}
       <div className="mt-8 pt-4 border-t border-gray-300 text-sm text-gray-600">
         <p className="mb-1">© 2025 AVIATOL - ご利用は個人での範囲に限ります</p>
