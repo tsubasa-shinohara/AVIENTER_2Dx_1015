@@ -8,7 +8,7 @@ import {
 // 物理制御と拡張制御を分離する定数を追加
 export const PHYSICAL_ATTITUDE_CONTROL = true;  // 物理ベースの姿勢制御 (常に有効にすべき)
 export const ENHANCED_ATTITUDE_CONTROL = true;  // 拡張姿勢制御 (風見効果など)
-export const WIND_ANGLE_LIMITATION = true;  // 風向きによる角度制限（90度制限）
+export const WIND_ANGLE_LIMITATION = false;  // 風向きによる角度制限（90度制限）
 
 // ロケットの投影面積を計算する関数
 export const calculateProjectedArea = (rocketParams) => {
