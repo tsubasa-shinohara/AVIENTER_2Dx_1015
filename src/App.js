@@ -14,10 +14,10 @@ const App = () => {
       <Routes>
         {/* ログイン画面 */}
         <Route path="/login" element={<Login />} />
-        
+
         {/* ロケットシミュレーター */}
         <Route
-          path="/"
+          path="/simulator"
           element={
             isLoggedIn() ? (
               <IntegratedRocketSimulator />
@@ -25,6 +25,12 @@ const App = () => {
               <Navigate to="/login" replace />
             )
           }
+        />
+
+        {/* デフォルトルート */}
+        <Route
+          path="/"
+          element={<Navigate to={isLoggedIn() ? "/simulator" : "/login"} replace />}
         />
       </Routes>
     </Router>
