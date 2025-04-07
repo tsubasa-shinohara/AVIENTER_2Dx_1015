@@ -33,6 +33,9 @@ import {
   ParameterSlider, DesignTab, AnalysisTab, SimulationTab
 } from './RocketUIComponents';
 
+// 新しい着地予測関連のインポートを追加
+import { predictLanding, calculateFlightPathWithLanding } from './RocketLandingPrediction';
+
 // 開発モード設定 - 本番環境ではfalseに設定する
 const ENABLE_DEV_MODE = false; // ここを true/false で切り替える
 
@@ -50,6 +53,7 @@ const useRocketSimulator = () => {
     finThickness: 1.5,
     finSweepLength: 95,
     finMaterial: "light_veneer",
+    finCount: 3,
     weight: 50,
     centerOfGravity: 150
   };
@@ -66,7 +70,7 @@ const useRocketSimulator = () => {
   const [finSweepLength, setFinSweepLength] = useState(95); // 95mmに変更
   const [finMaterial, setFinMaterial] = useState("light_veneer");
   // フィン枚数状態を追加
-  const [finCount, setFinCount] = useState(4); // デフォルトは4枚
+  const [finCount, setFinCount] = useState(3); // デフォルトは4枚
 
   // Analysis parameters - weight変数の宣言を初期化前の参照より前に移動
   const [weight, setWeight] = useState(50);
@@ -140,6 +144,10 @@ const useRocketSimulator = () => {
   const [aerodynamicCenter, setAerodynamicCenter] = useState(null);
   const [stabilityCenterOfPressure, setStabilityCenterOfPressure] = useState(null);
   const [staticMargins, setStaticMargins] = useState(null);
+
+  // 着地予測関連の状態変数を追加
+  const [landing, setLanding] = useState(null);
+  const [showLandingPrediction, setShowLandingPrediction] = useState(true);
 
   // 物理計算のための全パラメータをまとめる
   const simulationParams = useMemo(() => ({
@@ -614,6 +622,7 @@ const useRocketSimulator = () => {
     setCurrentMaxSpeed(0);
     setCurrentMaxDistance(0);
     setCurrentMaxFinDeflection(0);
+    setLanding(null); // 着地予測をリセット
 
     // 過去の飛行軌跡をクリア
     setCompletedFlights([]);
@@ -643,15 +652,16 @@ const useRocketSimulator = () => {
 
     try {
       // 風速プロファイルを引数として渡す
-      const flight = calculateFlightPath(
+      const flight = calculateFlightPathWithLanding(
+        calculateFlightPath,
         simulationParams,
         launchAngle,
         windSpeed,
-        windProfile, // 風速プロファイルを追加
+        windProfile,
         {
           ...SVG_CONFIG,
-          enhancedAttitudeControl, // 拡張姿勢制御フラグを渡す
-          windAngleLimitation     // 風向きによる角度制限フラグを渡す
+          enhancedAttitudeControl,
+          windAngleLimitation
         }
       );
 
@@ -660,12 +670,46 @@ const useRocketSimulator = () => {
         return;
       }
 
+      // エラーチェックを追加
+      if (flight.error?.hasError) {
+        console.error('シミュレーションでエラーが発生しました:', flight.error.message);
+
+        // エラーポップアップを表示（エラー用の結果オブジェクトを作成）
+        const errorResults = {
+          isError: true,
+          errorType: flight.error.type,
+          errorMessage: flight.error.message,
+          errorTime: flight.error.time,
+          velocity: flight.error.velocity,
+          finDivergenceSpeed: flight.error.finDivergenceSpeed,
+          finFlutterSpeed: flight.error.finFlutterSpeed,
+          maxDeflectionPercent: flight.error.maxDeflectionPercent,
+          launchAngle,
+          windSpeed,
+          windProfile
+        };
+
+        setFlightResults(errorResults);
+        setShowResultsPopup(true);
+        return; // 早期リターンでこれ以上の処理を行わない
+      }
+
       // 初期データを取得（最初のフレーム用）
       const initialData = flight.data[0];
       console.log('初期フライトデータ：', initialData);
       console.log(`最高到達高度: ${flight.maxHeight.toFixed(2)}m, 最高速度: ${flight.maxSpeed.toFixed(2)}m/s, 最大水平距離: ${flight.maxDistance.toFixed(2)}m`);
       console.log(`最大フィンたわみ量: ${flight.maxFinDeflection.toFixed(4)}mm`);
       console.log(`姿勢安定性: 最大角度変化量=${flight.angleStability.maxAngleChangePerDt2.toFixed(2)}°`);
+      // 絶対角度の判定結果も出力
+      console.log(`絶対角度安定性: 最大絶対角度=${flight.angleStability.maxAbsoluteAngle?.toFixed(2) || 0}°, 判定=${flight.angleStability.isAbsoluteAngleOK ? 'OK' : 'NG'}`);
+
+      // 着地予測情報をログ出力
+      if (flight.landing) {
+        console.log(`着地予測: 距離=${flight.landing.landingDistance.toFixed(2)}m, 時間=${flight.landing.timeToLanding.toFixed(2)}秒`);
+      }
+
+      // 着地予測情報を状態に保存
+      setLanding(flight.landing);
 
       // キーポイントを保存
       setKeyPoints(flight.keyPoints);
@@ -760,9 +804,13 @@ const useRocketSimulator = () => {
                 // 姿勢安定性の判定結果 - シミュレーション結果から直接取得
                 const isAngleStableOK = flight.angleStability.isAngleStableOK;
                 const maxAngleChangePerDt2 = flight.angleStability.maxAngleChangePerDt2;
+                // 絶対角度判定を追加 
+                const isAbsoluteAngleOK = flight.angleStability.isAbsoluteAngleOK;
+                const maxAbsoluteAngle = flight.angleStability.maxAbsoluteAngle;
 
                 // 総合判定は全てのチェックをパスする必要がある
-                const isOverallOK = isDivergenceOK && isFlutterOK && isDeflectionOK && isAngleStableOK;
+                // 絶対角度判定も含める
+                const isOverallOK = isDivergenceOK && isFlutterOK && isDeflectionOK && isAngleStableOK && isAbsoluteAngleOK;
 
                 // 結果オブジェクトの作成
                 const results = {
@@ -778,11 +826,14 @@ const useRocketSimulator = () => {
                   isFlutterOK,
                   isDeflectionOK,
                   isAngleStableOK,
+                  isAbsoluteAngleOK, // 絶対角度判定を追加
                   maxAngleChangePerDt2,
+                  maxAbsoluteAngle, // 最大絶対角度を追加
                   isOverallOK,
                   launchAngle,
                   windSpeed,
-                  windProfile
+                  windProfile,
+                  landing: flight.landing // 着地予測情報を追加
                 };
 
                 // 状態更新を一度に行う
@@ -1016,6 +1067,11 @@ const useRocketSimulator = () => {
     setEnhancedAttitudeControl,
     windAngleLimitation,
     setWindAngleLimitation,
+
+    // 着地予測関連
+    landing,
+    showLandingPrediction,
+    setShowLandingPrediction,
 
     // 操作関数
     handleLaunch,

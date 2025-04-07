@@ -7,7 +7,7 @@ import {
 
 // 物理制御と拡張制御を分離する定数を追加
 export const PHYSICAL_ATTITUDE_CONTROL = true;  // 物理ベースの姿勢制御 (常に有効にすべき)
-export const ENHANCED_ATTITUDE_CONTROL = true;  // 拡張姿勢制御 (風見効果など)
+export const ENHANCED_ATTITUDE_CONTROL = false;  // 拡張姿勢制御 (風見効果など)
 export const WIND_ANGLE_LIMITATION = false;  // 風向きによる角度制限（90度制限）
 
 // ロケットの投影面積を計算する関数
@@ -29,7 +29,7 @@ export const calculateProjectedArea = (rocketParams) => {
   const {
     noseShape, noseHeight, bodyHeight, bodyWidth,
     finHeight, finBaseWidth, finTipWidth, finSweepLength, finThickness,
-    finCount = 3
+    finCount = 4
   } = rocketParams;
 
   // 必須パラメータが存在しない場合はエラーログを出力し、安全な値を返す
@@ -452,29 +452,64 @@ export const calculateFinFlutterSpeed = (rocketParams) => {
   const G = material.G; // 横弾性係数 (Pa)
   const E = material.E; // 縦弾性係数 (Pa)
 
-  // J（ねじり定数/断面二次極モーメント）
-  const torsionConstant = 0.333 * finThickness_m * Math.pow(finTipWidth_m, 3);
+  // 比熱比
+  const specificHeatRatio = 0.221;
 
-  // Kα（ねじり剛性）Kα=GJ
-  const torsionalStiffness = G * torsionConstant;
-
-  // εイプシロン（2bを翼弦線としたときの弾性軸から翼の空力中心までのbに対する比率）
+  // イプシロン（ひずみ）
   const epsilon = 0.25;
 
+  // lengthOfCo
+  const lengthOfCo = ((finBaseWidth_m - finTipWidth_m) / finHeight_m) * ((bodyWidth_m / 2) + finHeight_m) + finTipWidth_m;
+
+  // 翼のスパンの1/2
+  const finSpan_half = finHeight_m + bodyWidth_m / 2;
+
+  // 翼弦の50%
+  const chord_half = lengthOfCo * 0.5;
+
+  // 翼弦長の75%
+  const cord_threequarter = lengthOfCo * 0.75;
+
+  // アスペクト比
+  const aspectRatio_FL = finSpan_half / chord_half;
+
+  // テーパー比
+  const taperRatio = finTipWidth_m / lengthOfCo;
+
+  // 基準気圧, 測定気圧
+  const atmosphericPressure_O = 101325;
+  const atmosphericPressure_M = 101325;
+
+  // フィンの断面2次極モーメント
+  const polarMomentOfArea_fin = cord_threequarter * finThickness_m * (Math.pow(finThickness_m, 2) + Math.pow(cord_threequarter, 2)) / 12;
+
+  // GEの計算
+  const Ge = (6 * polarMomentOfArea_fin * G) / (cord_threequarter * Math.pow(finThickness_m, 3));
+
+  // ポアソン比（一般的な値）
+  const poissonsRatio = 0.3;
+
   // 空気密度 (kg/m³)
-  const airDensity = 1.225;
+  const rho = 1.225;
 
-  // S（翼面積）
-  const finSection_single = (finTipWidth_m + finBaseWidth_m) * finHeight_m * 0.5;
+  // 平均コード長の計算 (m)
+  const meanChord = (finBaseWidth_m + finTipWidth_m) / 2;
 
-  // b（翼弦長の半分）
-  const half_finTipWidth = finTipWidth_m / 2;
+  // 経験的定数
+  const empiricalConstant = 3.5;
 
-  // ∂Cl/∂α（揚力傾斜）
-  const liftSlope = 3.44;
+  // フィンフラッター速度の計算 (m/s)
+  // V_flutter = (a * t / c^1.5) * sqrt(G * E / (12 * ρ * (1 - ν^2)))
+  const factorA = empiricalConstant * finThickness_m / Math.pow(meanChord, 1.5);
+  const factorB = Math.sqrt(G * E / (12 * rho * (1 - Math.pow(poissonsRatio, 2))));
 
-  // フラッター速度
-  const flutterSpeed = Math.pow((2 * torsionalStiffness) / (epsilon * airDensity * finSection_single * half_finTipWidth * liftSlope), 0.5);
+  // 計算結果が無効な場合のフォールバック
+  if (!isFinite(factorA) || !isFinite(factorB)) {
+    console.warn('フィンフラッター速度の計算に無効な値が発生しました。代替値を使用します。');
+    return 40 + mmToM(rocketParams.bodyHeight + rocketParams.noseHeight) * 120;
+  }
+
+  const flutterSpeed = Math.pow(3.14 * Math.pow((finThickness_m / cord_threequarter), 3) * Ge / (12 * epsilon * (Math.pow(aspectRatio_FL, 3) / (aspectRatio_FL + 2)) * (taperRatio + 1) * specificHeatRatio * atmosphericPressure_O * (atmosphericPressure_M / atmosphericPressure_O)), 0.5) * 343;
 
   // 現実的な範囲内に制限（極端に大きな/小さな値を防止）
   return Math.max(30, Math.min(400, flutterSpeed));
@@ -548,6 +583,11 @@ const calculateFinDeflection = (velocity, material, finParams, angleChangePerDt2
       return 15; // NaNの場合は閾値を返す
     }
 
+    // デバッグ情報
+    console.log(`フィンたわみ量計算: ${deflectionMm.toFixed(3)}mm, 速度=${safeVelocity.toFixed(1)}m/s`);
+    console.log(`計算パラメータ: フィン面積=${finArea.toFixed(6)}m², 平均コード長=${meanChord.toFixed(5)}m`);
+    console.log(`断面二次モーメント(I)=${I.toFixed(12)}, 風力=${windForce.toFixed(3)}N`);
+
     // たわみ量の絶対値が15mmを超える場合は15に制限
     if (Math.abs(deflectionMm) > 15) {
       return 15; // 15mmを超えるたわみは15に制限
@@ -618,9 +658,6 @@ export const calculateWindSpeedAtHeight = (baseWindSpeed, height, profile) => {
 
 // モーメント計算用のヘルパー関数 - 修正版
 const calculateLiftMoment = (velocity, omega, flightAngle, rocketParams, sideArea, aerodynamicCenter, centerOfGravity) => {
-  const centerOfGravity_m = mmToM(centerOfGravity);
-  const aerodynamicCenter_m = mmToM(aerodynamicCenter);
-
   const velocitySquared = Math.min(velocity * velocity, 10000);
 
   // 迎角（姿勢角と飛行角の差）を計算
@@ -631,24 +668,32 @@ const calculateLiftMoment = (velocity, omega, flightAngle, rocketParams, sideAre
   const liftCoefficient = 0.6 * angleOfAttack;  // 係数は0.6
 
   // 揚力モーメントの計算 - 絶対値のみを計算
-  const momentMagnitude = Math.abs(liftCoefficient * 0.5 * 1.225 * velocitySquared * sideArea * (aerodynamicCenter_m - centerOfGravity_m));
+  const momentMagnitude = Math.abs(liftCoefficient * 0.5 * 1.225 * velocitySquared * sideArea * (aerodynamicCenter - centerOfGravity) * 0.001);
 
   // 符号の決定
   let finalMoment;
   if ((aerodynamicCenter >= centerOfGravity && angleOfAttack < 0) ||
     (aerodynamicCenter < centerOfGravity && angleOfAttack >= 0)) {
-    finalMoment = momentMagnitude; //プラスに改造中0402（時計回りをプラス）
+    finalMoment = -momentMagnitude; // マイナス
   } else {
-    finalMoment = -momentMagnitude; //マイナスに改造中0402（時計回りをプラス）
+    finalMoment = momentMagnitude;  // プラス
+  }
+
+  // 最小モーメント保証 (非常に小さな値になるのを防ぐ)
+  const MIN_MOMENT = 0.00001;
+  if (Math.abs(finalMoment) > 0 && Math.abs(finalMoment) < MIN_MOMENT) {
+    return Math.sign(finalMoment) * MIN_MOMENT;
+  }
+
+  // 角度が大きすぎる場合はモーメントを増加
+  if (Math.abs(angleOfAttack) > 0.5) {  // 約28.6度以上
+    return finalMoment * 1.2;  // モーメントを20%増加
   }
 
   return finalMoment;
 };
 
 const calculateDragMoment = (velocity, omega, flightAngle, rocketParams, bodyDiameter, aerodynamicCenter, centerOfGravity) => {
-  const centerOfGravity_m = mmToM(centerOfGravity);
-  const aerodynamicCenter_m = mmToM(aerodynamicCenter);
-
   const velocitySquared = Math.min(velocity * velocity, 10000);
 
   // 迎角を計算
@@ -658,61 +703,80 @@ const calculateDragMoment = (velocity, omega, flightAngle, rocketParams, bodyDia
   const dragCoefficient = 0.01 * Math.pow(angleOfAttack, 2) - 0.02 * angleOfAttack + 0.63;
 
   // 抗力モーメントの計算 - 絶対値のみを計算
-  const momentMagnitude = Math.abs(dragCoefficient * 0.5 * 1.225 * velocitySquared * (bodyDiameter * 0.001 / 2) * (bodyDiameter * 0.001 / 2) * 3.14 * (aerodynamicCenter_m - centerOfGravity_m));
+  const momentMagnitude = Math.abs(dragCoefficient * 0.5 * 1.225 * velocitySquared * (bodyDiameter * 0.001 / 2) * (bodyDiameter * 0.001 / 2) * 3.14 * (aerodynamicCenter - centerOfGravity) * 0.001);
 
   // 符号の決定
   let finalMoment;
   if ((aerodynamicCenter >= centerOfGravity && angleOfAttack < 0) ||
     (aerodynamicCenter < centerOfGravity && angleOfAttack >= 0)) {
-    finalMoment = momentMagnitude; //プラスに改造中0402（時計回りをプラス）
+    finalMoment = -momentMagnitude; // マイナス
   } else {
-    finalMoment = -momentMagnitude;  //マイナスに改造中0402（時計回りをプラス）
+    finalMoment = momentMagnitude;  // プラス
+  }
+
+  // 最小モーメント保証
+  const MIN_MOMENT = 0.00001;
+  if (Math.abs(finalMoment) > 0 && Math.abs(finalMoment) < MIN_MOMENT) {
+    return Math.sign(finalMoment) * MIN_MOMENT;
   }
 
   return finalMoment;
 };
 
-const calculateWindMoment = (noseHeight, bodyDiameter, bodyHeight, windSpeed, omega, totalFinArea, centerOfPressure, centerOfGravity) => {
-  // --- 追加: 未定義入力のチェック ---
-  if (windSpeed == null || isNaN(windSpeed)) windSpeed = 0;
-  if (omega == null || isNaN(omega)) omega = 0;
-  if (centerOfPressure == null || centerOfGravity == null) {
-    return 0;  // 必要情報がなければモーメント0
+const calculateWindMoment = (noseHeight, bodyDiameter, bodyHeight, finCount, windSpeed, omega, totalFinArea, centerOfPressure, stabilityCenterOfPressure, centerOfGravity) => {
+  // パラメータのバリデーション
+  if (isNaN(noseHeight) || isNaN(bodyDiameter) || isNaN(bodyHeight) || 
+      isNaN(windSpeed) || isNaN(omega) || isNaN(totalFinArea) || 
+      isNaN(centerOfPressure) || isNaN(centerOfGravity)) {
+    console.error("Invalid parameters in calculateWindMoment:", {
+      noseHeight, bodyDiameter, bodyHeight, windSpeed, omega, totalFinArea, 
+      centerOfPressure, centerOfGravity
+    });
+    return 0; // 安全値を返す
   }
-
-  const centerOfGravity_m = mmToM(centerOfGravity);
-  const centerOfPressure_m = mmToM(centerOfPressure);
-
-  const bodyHeight_m = mmToM(bodyHeight);
-  const noseHeight_m = mmToM(noseHeight);
 
   // 風速に上限を設定
   const safeWindSpeed = Math.max(-25, Math.min(25, windSpeed));
 
   // 風速によりフィンが受ける力
-  const Dwf = 1.28 * 0.05 * Math.pow(safeWindSpeed, 2) * totalFinArea; // 係数1.28スタート
+  const Dwf = 1.28 * 0.5 * 1.225 * Math.pow(safeWindSpeed, 2) * totalFinArea;
 
-  // 風速によりボディが受ける力
-  const Dwb = 0.23 * 0.5 * 1.225 * Math.pow(safeWindSpeed, 2) * bodyDiameter * (bodyHeight_m + noseHeight_m);
+  // 風速によりボディが受ける力(当初Cd=0.25くらい)
+  const Dwb = 0.25 * 0.5 * 1.225 * Math.pow(safeWindSpeed, 2) * bodyDiameter * (bodyHeight + noseHeight) / 1000;
+
+  // NaNチェック (デバッグ用)
+  if (isNaN(Dwf) || isNaN(Dwb)) {
+    console.error("NaN detected in wind force calculation:", { Dwf, Dwb, totalFinArea, bodyDiameter });
+    return 0;
+  }
 
   // 安全なコサイン計算
   const cosAngle = Math.cos(omega);
 
   // 風モーメントの計算 - 絶対値のみを計算
-  const momentMagnitude = Math.abs((Dwf + Dwb) * cosAngle * (centerOfPressure_m - centerOfGravity_m));
+  const momentMagnitude = Math.abs((Dwf + Dwb) * cosAngle * (centerOfPressure - centerOfGravity) * 0.001);
+
+  // NaNチェック (デバッグ用)
+  if (isNaN(momentMagnitude)) {
+    console.error("NaN detected in momentMagnitude:", { 
+      Dwf, Dwb, cosAngle, centerOfPressure, centerOfGravity 
+    });
+    return 0;
+  }
 
   // 符号の決定
   let finalMoment;
   if ((centerOfPressure >= centerOfGravity && windSpeed < 0) ||
-    (centerOfPressure < centerOfGravity && windSpeed >= 0)) {
-    finalMoment = -momentMagnitude;  // マイナスに改造中0402（時計回りをプラス）
+      (centerOfPressure < centerOfGravity && windSpeed >= 0)) {
+    finalMoment = momentMagnitude;  // プラス
   } else {
-    finalMoment = momentMagnitude; // プラスに改造中0402（時計回りをプラス）
+    finalMoment = -momentMagnitude; // マイナス
   }
 
-  // --- 追加: NaNチェック ---
-  if (!isFinite(finalMoment) || isNaN(finalMoment)) {
-    finalMoment = 0;
+  // 最小モーメント保証
+  const MIN_MOMENT = 0.00001;
+  if (Math.abs(finalMoment) > 0 && Math.abs(finalMoment) < MIN_MOMENT) {
+    return Math.sign(finalMoment) * MIN_MOMENT;
   }
 
   return finalMoment;
@@ -746,83 +810,38 @@ const applyWindDirectionAngleLimit = (omega, windSpeed) => {
   return omega;
 };
 
-// 迎角変化によるフィンの舵モーメントを計算する関数
-const calculateFinMoment = (finHeight, finBaseWidth, finCount, velocity, omega, flightAngle, finMaterial, finCp, centerOfGravity) => {
-  // --- 追加: 未定義入力のチェック ---
-  if (omega == null || isNaN(omega)) omega = 0;
-  if (flightAngle == null || isNaN(flightAngle)) flightAngle = 0;
-  if (centerOfGravity == null) return 0;
-  // フィン寸法・速度は基本的に定義済みと期待
-
-  const centerOfGravity_m = mmToM(centerOfGravity);
-  const finCp_m = mmToM(finCp);
-
-  // 空気密度（kg/m³）
-  const rho = 1.225;
-
-  // フィンの投影面積を再計算 (1枚あたり)
-  const finHeight_m = mmToM(finHeight);
-  const finBaseWidth_m = mmToM(finBaseWidth);
-
-  // 迎角を計算
-  const angleOfAttack = omega - flightAngle; //const angleOfAttack = omega - flightAngle;
-
-  // 傾いたフィンの面積
-  let finLeanArea;
-  if (finCount === 3) {
-    finLeanArea = Math.abs(finHeight_m * (1.732 / 2) * finBaseWidth_m * Math.sin(angleOfAttack));
-  } else {
-    finLeanArea = Math.abs(finHeight_m * finBaseWidth_m * Math.sin(angleOfAttack));
-  }
-
-  // フィン総面積（枚数分）
-  const totalLeanFinArea = finLeanArea * 2;
-
-  // 抗力係数（cd）は迎角に依存する
-  // 小迎角の範囲内では以下の簡易近似式を用いる
-  const cd = 0.3 / (5 * 3.14 / 180) * angleOfAttack;
-
-  // 抗力Dの計算
-  const dragOfFinLean = cd * 0.5 * rho * velocity * velocity * totalLeanFinArea;
-
-  // モーメントアーム (m)
-  const momentArm = mmToM(Math.abs(finCp_m - centerOfGravity_m));
-
-  // モーメントの絶対量の計算（Nm）
-  const momentMagnitude = Math.abs(dragOfFinLean * momentArm * Math.sign(angleOfAttack));
-
-  // 符号の決定
-  let finalMoment;
-  if ((finCp_m >= centerOfGravity && angleOfAttack < 0) ||
-    (finCp_m < centerOfGravity && angleOfAttack >= 0)) {
-    finalMoment = -momentMagnitude; // マイナスに変更4/3（時計回りをプラス）
-  } else {
-    finalMoment = momentMagnitude; // プラスに変更4/3（時計回りをプラス）
-  }
-
-  return finalMoment;
-};
-
+// 推力モーメント計算関数
 // 推力モーメント計算関数
 const calculateThrustMoment = (thrust, centerOfGravity, omega, flightAngle, rocketParams) => {
   const { noseHeight, bodyHeight } = rocketParams;
 
-  // 迎角を計算
-  const angleOfAttack = omega - flightAngle;
-
   // 推力発生位置（ロケットの最後尾）
   const thrustPosition = noseHeight + bodyHeight;
 
+  // 迎角を計算 - 初期化前の参照エラーを修正
+  const angleOfAttack = omega - flightAngle;
+
+  // パラメータのバリデーション
+  if (isNaN(angleOfAttack) || isNaN(thrustPosition) || isNaN(centerOfGravity)) {
+    console.error("Invalid parameters in calculateThrustMoment:", {
+      angleOfAttack, thrustPosition, centerOfGravity
+    });
+    return 0; // 安全な値を返す
+  }
+
   // 推力モーメントの計算 - 絶対値のみを計算
-  const momentMagnitude = Math.abs(thrust * Math.sin(angleOfAttack) * Math.cos(angleOfAttack) * (thrustPosition - centerOfGravity) * 0.001);
+  const momentMagnitude = Math.abs(thrust * Math.sin(angleOfAttack) * (thrustPosition - centerOfGravity) * 0.001);
 
   // 符号の決定
   let finalMoment;
-  if ((thrustPosition >= centerOfGravity && angleOfAttack < 0) ||
-    (thrustPosition < centerOfGravity && angleOfAttack >= 0)) {
-    finalMoment = momentMagnitude;  // プラス
+
+  // 新しい条件に基づいて符号を決定
+  // 反時計回りを正とする
+  if ((thrustPosition >= centerOfGravity && angleOfAttack >= 0) ||
+    (thrustPosition < centerOfGravity && angleOfAttack < 0)) {
+    finalMoment = momentMagnitude;  // プラス (反時計回り)
   } else {
-    finalMoment = -momentMagnitude; // マイナス
+    finalMoment = -momentMagnitude; // マイナス (時計回り)
   }
 
   // 最小モーメント保証
@@ -839,15 +858,6 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
   // 設定オブジェクトからフラグを取得（設定がなければデフォルト値を使用）
   const useEnhancedAttitudeControl = config?.enhancedAttitudeControl ?? ENHANCED_ATTITUDE_CONTROL;
   const useWindAngleLimitation = config?.windAngleLimitation ?? WIND_ANGLE_LIMITATION;
-
-  // rocketParamsからfinCountを取得（デフォルト値は3）
-  const finCount = rocketParams.finCount || 3;
-
-  // 風速がゼロの場合、特別な処理を行うフラグ
-  const isZeroWind = Math.abs(windSpeed) < 0.01;
-  // 現在のループイテレーションでの風速ゼロフラグ（初期化）
-  let isCurrentlyZeroWind = isZeroWind;
-
   // 角度変化を記録するための変数
   let prevOmega = angle * Math.PI / 180; // 前フレームの角度（初期値は発射角度）
   let currentMaxAngleChange = 0; // 直接更新用の最大角度変化量
@@ -861,49 +871,19 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
   // ロケットの物理パラメータ
   const bodyDiameter = mmToM(rocketParams.bodyWidth); // ロケット直径 (m)
   const bodyRadius = bodyDiameter / 2; // ロケット半径 (m)
-  const bodyLength = mmToM(rocketParams.bodyHeight + rocketParams.noseHeight); // 
-  const finBaseWidth_m = mmToM(rocketParams.finBaseWidth);
-  const finHeight_m = mmToM(rocketParams.finHeight);
-  const finTipWidth_m = mmToM(rocketParams.finTipWidth);
-  const finSweepLength_m = mmToM(rocketParams.finSweepLength);
+  const bodyLength = mmToM(rocketParams.bodyHeight + rocketParams.noseHeight); // ロケット全長 (m)
   const finwidth_m = mmToM(rocketParams.finHeight); // フィン幅
   const finThickness_m = mmToM(rocketParams.finThickness);
-  const finCp_m = mmToM(rocketParams.finCp);
   const PI = Math.PI;
 
-  // フィン材料特性
-  const finMaterial = FIN_MATERIALS['light_veneer']; // デフォルト値を設定
-
-  // 慣性モーメントの計算 (I = 0.25*(M-m_fin)*r^2 + 0.0833*(M-m_fin)*l^2 + I_CM + m_fin*d^2)
-  let momentOfInertia;
-  if (finCount === 3) {
-    const finVol = (finTipWidth_m + finBaseWidth_m) * finHeight_m * 0.5 * finThickness_m;
-    const finMass = finVol * finMaterial.MD;
-    let fin_momentOfInertia;
-    if (finSweepLength_m + finTipWidth_m > finBaseWidth_m) {
-      fin_momentOfInertia = Math.pow((finBaseWidth_m + (finSweepLength_m + finTipWidth_m - finBaseWidth_m)) / 2, 2) * finMass / 3;
-    } else {
-      fin_momentOfInertia = Math.pow(finBaseWidth_m / 2, 2) * finMass / 3;
-    }
-    const cg_to_sideFincg = Math.pow(Math.pow(((finTipWidth_m + (2 * finBaseWidth_m)) / (3 * (finTipWidth_m + finBaseWidth_m))) * (finHeight_m * 1.732 / 2), 2) + Math.pow(finCp_m, 2), 0.5);
-    momentOfInertia = 0.25 * (mass_kg - finMass * 3) * bodyRadius * bodyRadius + 0.0833 * (mass_kg - finMass * 3) * bodyLength * bodyLength + ((fin_momentOfInertia + finMass * Math.pow(finCp_m, 2)) + (fin_momentOfInertia + finMass * Math.pow(cg_to_sideFincg, 2)) * 2);
-
-  } else {
-    const finVol = (finTipWidth_m + finBaseWidth_m) * finHeight_m * 0.5 * finThickness_m;
-    const finMass = finVol * finMaterial.MD;
-    let fin_momentOfInertia;
-    if (finSweepLength_m + finTipWidth_m > finBaseWidth_m) {
-      fin_momentOfInertia = Math.pow((finBaseWidth_m + (finSweepLength_m + finTipWidth_m - finBaseWidth_m)) / 2, 2) * finMass / 3;
-    } else {
-      fin_momentOfInertia = Math.pow(finBaseWidth_m / 2, 2) * finMass / 3;
-    }
-    const cg_to_sideFincg = Math.pow(Math.pow(((finTipWidth_m + (2 * finBaseWidth_m)) / (3 * (finTipWidth_m + finBaseWidth_m))) * finHeight_m, 2) + Math.pow(finCp_m, 2), 0.5);
-    momentOfInertia = 0.25 * (mass_kg - finMass * 3) * bodyRadius * bodyRadius + 0.0833 * (mass_kg - finMass * 3) * bodyLength * bodyLength + ((fin_momentOfInertia + finMass * Math.pow(finCp_m, 2)) * 2 + (fin_momentOfInertia + finMass * Math.pow(cg_to_sideFincg, 2)) * 2);
-
-  }
+  // 慣性モーメントの計算 (I = 0.25*m*r^2 + 0.05*m*l^2 (0.0833*m*l^2から変更))
+  const momentOfInertia = 0.25 * mass_kg * bodyRadius * bodyRadius + 0.0833 * mass_kg * bodyLength * bodyLength;
 
   // ノーズ形状に基づく抗力係数
   const noseCd = NOSE_SHAPES[rocketParams.noseShape].cd;
+
+  // フィン材料特性
+  const finMaterial = FIN_MATERIALS[rocketParams.finMaterial];
 
   // パラシュート関連の定数
   const thrustEndTime = thrustData.length * dt;
@@ -918,8 +898,6 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
   const centerOfPressure = calculateCenterOfPressure(rocketParams);
   const aerodynamicCenter = calculateAerodynamicCenter(rocketParams);
   const stabilityCenterOfPressure = calculateStabilityCenterOfPressure(rocketParams);
-
-  rocketParams.finCp = centerOfPressure.finCp;
 
   // 体積計算
   const volumes = calculateVolume(rocketParams);
@@ -944,17 +922,25 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
   let parachuteDeploymentProgress = 0;
   let finDeflection = 0; // フィンのたわみ量（mm）
 
+  // エラー検出フラグを追加
+  let hasFatalError = false; // 致命的エラーフラグ
+  let errorMessage = ""; // エラーメッセージ
+  let errorType = ""; // エラータイプ（"torque", "flutter", "divergence", "deflection"）
+
+  // エラー閾値の定義
+  const ERROR_THRESHOLDS = {
+    deflectionPercent: 15, // フィンたわみ量がフィン高さの15%を超えたらエラー
+    torqueMaxValue: 10,    // トルクの最大許容値
+    // 各種閾値はここで定義
+  };
+
   // 姿勢安定性チェック用の変数を追加
   let maxAngleChangePerDt2 = 0; // dt2時間あたりの最大角度変化量
   let isAngleStableOK = true; // 姿勢安定性の判定
-  let isAbsoluteAngleOK = true; // 絶対角度の判定
-  const MAX_ANGLE_CHANGE_PER_DT2 = 45.0; // 角度変化量の最大値（±45度）- 変更点1: 10°→45°
-  const MAX_ABSOLUTE_ANGLE = 112.5; // 絶対角度の最大値（±112.5度）- 変更点2: 新規追加
   let thrustEndFlag = false; // 推力終了フラグ
   let angleChanges = []; // 角度変化履歴を記録
   const angleChangeBuffer = []; // dt2時間ごとの角度変化を記録するバッファ
   const initialOmegaDegrees = angle; // 初期角度（度）
-  let maxAbsoluteAngle = 0; // 最大絶対角度の記録用 - 変更点3: 新規追加
 
   // 角度計算用変数
   let stepCounter = 0;
@@ -982,9 +968,67 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
 
   // シミュレーションループ
   while ((y >= 0 || time < 0.1) && time < MAX_TIME) {
+    // エラーチェック - 致命的エラーがあればループを終了
+    if (hasFatalError) {
+      console.error("Fatal error detected, stopping simulation.");
+      break;
+    }
     // 前回の速度を保存
     prev_vx = vx;
     prev_vy = vy;
+
+    // 速度の大きさを計算
+    const velocity = Math.sqrt(prev_vx * prev_vx + prev_vy * prev_vy);
+
+    // フィンフラッターチェック
+    const finFlutterSpeed = calculateFinFlutterSpeed(rocketParams);
+    if (velocity > finFlutterSpeed) {
+      hasFatalError = true;
+      errorType = "flutter";
+      errorMessage = `フィンフラッター速度(${finFlutterSpeed.toFixed(1)}m/s)を超過しました。速度: ${velocity.toFixed(1)}m/s (t=${time.toFixed(2)}s)`;
+      console.error(errorMessage);
+      break;
+    }
+
+    // フィンダイバージェンスチェック
+    const finDivergenceSpeed = calculateFinDivergenceSpeed(rocketParams);
+    if (velocity > finDivergenceSpeed) {
+      hasFatalError = true;
+      errorType = "divergence";
+      errorMessage = `フィンダイバージェンス速度(${finDivergenceSpeed.toFixed(1)}m/s)を超過しました。速度: ${velocity.toFixed(1)}m/s (t=${time.toFixed(2)}s)`;
+      console.error(errorMessage);
+      break;
+    }
+
+    // フィンのたわみ量チェック
+    if (velocity > 5.0) {
+      const finParams = {
+        finHeight: rocketParams.finHeight,
+        finBaseWidth: rocketParams.finBaseWidth,
+        finTipWidth: rocketParams.finTipWidth,
+        finThickness: rocketParams.finThickness,
+        finSweepLength: rocketParams.finSweepLength
+      };
+
+      finDeflection = calculateFinDeflection(velocity, finMaterial, finParams, angleChangePerDt2);
+
+      // たわみ量がフィン高さの一定割合を超えたらエラー
+      const deflectionPercent = (finDeflection / rocketParams.finHeight) * 100;
+      if (deflectionPercent > ERROR_THRESHOLDS.deflectionPercent) {
+        hasFatalError = true;
+        errorType = "deflection";
+        errorMessage = `フィンのたわみ量がフィン高さの${ERROR_THRESHOLDS.deflectionPercent}%を超過しました。たわみ量: ${finDeflection.toFixed(2)}mm (${deflectionPercent.toFixed(1)}%) (t=${time.toFixed(2)}s)`;
+        console.error(errorMessage);
+        break;
+      }
+
+      // 最大フィンたわみ量を更新
+      if (finDeflection > maxFinDeflection) {
+        maxFinDeflection = finDeflection;
+      }
+    } else {
+      finDeflection = 0;
+    }
 
     // パラシュート状態の更新
     if (!isParachuteEjected && time >= parachuteEjectionTime) {
@@ -1011,14 +1055,8 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
     const distanceFromStart = Math.sqrt(x * x + y * y);
     const onLaunchRail = distanceFromStart < launchRailLength;
 
-    // 速度の大きさ
-    const velocity = Math.sqrt(prev_vx * prev_vx + prev_vy * prev_vy);
-
     // 現在の高度に基づく有効風速を計算
     const effectiveWindSpeed = calculateWindSpeedAtHeight(windSpeed, y, windProfile);
-
-    // 現在の風速ゼロ判定を更新
-    isCurrentlyZeroWind = Math.abs(effectiveWindSpeed) < 0.1;
 
     // 力と加速度の初期化
     let ax = 0;
@@ -1031,26 +1069,6 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
     // 特定の角度への対応
     const angleAdjustment = Math.abs(angle) === 4 || Math.abs(angle) === 18 ? 0.01 : 0;
     const adjustedOmega = omega + angleAdjustment * (angle < 0 ? -1 : 1);
-
-    // 絶対角度の計算と判定 - 変更点4: 絶対角度の計算と判定を追加
-    const absoluteOmegaDegrees = (adjustedOmega * 180 / Math.PI) % 360;
-    // -180°から+180°の範囲に正規化
-    const normalizedAbsoluteAngle = absoluteOmegaDegrees > 180 ? absoluteOmegaDegrees - 360 : absoluteOmegaDegrees;
-
-    // 発射台を離れた後のみ絶対角度をチェック（パラシュート展開前まで）
-    if (!onLaunchRail && !isParachuteEjected) {
-      // 最大絶対角度を更新
-      if (Math.abs(normalizedAbsoluteAngle) > Math.abs(maxAbsoluteAngle)) {
-        maxAbsoluteAngle = normalizedAbsoluteAngle;
-        console.log(`新しい最大絶対角度検出: ${normalizedAbsoluteAngle.toFixed(2)}° (t=${time.toFixed(2)}s)`);
-      }
-
-      // 絶対角度が閾値を超えたら安定性NG判定
-      if (Math.abs(normalizedAbsoluteAngle) > MAX_ABSOLUTE_ANGLE) {
-        isAbsoluteAngleOK = false;
-        console.log(`絶対角度の閾値超過: ${normalizedAbsoluteAngle.toFixed(2)}° > ±${MAX_ABSOLUTE_ANGLE}° (t=${time.toFixed(2)}s)`);
-      }
-    }
 
     // フィンのたわみ量計算
     if (velocity > 5.0) {
@@ -1137,10 +1155,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       // 通常飛行フェーズ
 
       // ロケットの抗力計算 - ノーズ形状に基づく抗力係数を使用
-      const bodydia_noseleng_ratio = (rocketParams.noseHeight) * 0.001 / bodyDiameter;
-      const alfa = (0.9 - noseCd) / 9;
-      const Cd = alfa * Math.pow(bodydia_noseleng_ratio, 2) - 6 * alfa * bodydia_noseleng_ratio + (noseCd + (9 * alfa)); // ノーズ長さにおけるCd値の変更
-
+      const Cd = noseCd;
       const rho = 1.225; // 空気密度
       const Area = PI * Math.pow(bodyDiameter / 2, 2) + finwidth_m * finThickness_m * 4;
       const Dt = 0.5 * Cd * rho * velocity * velocity * Area;
@@ -1191,45 +1206,62 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
             const flightAngle = Math.atan2(prev_vx, prev_vy);
 
             try {
-              // モーメント計算関数
-              let ML, MD, MW, MF;
+              // 新しいモーメント計算関数を使用
+              const ML = calculateLiftMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
+              const MD = calculateDragMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
+              const MW = calculateWindMoment(
+                rocketParams.noseHeight,
+                bodyDiameter,
+                rocketParams.bodyHeight,
+                rocketParams.finCount,  // ここが抜けていた
+                effectiveWindSpeed,
+                adjustedOmega,
+                projectedAreas.totalFinArea,
+                centerOfPressure.centerOfPressure,
+                stabilityCenterOfPressure.stabilityCenterOfPressure,  // これも必要
+                rocketParams.centerOfGravity
+              );
+              const thrustForMoment = typeof effectiveThrust !== 'undefined' ? effectiveThrust : thrust;
+              const MT = calculateThrustMoment(thrustForMoment, rocketParams.centerOfGravity, adjustedOmega, flightAngle, rocketParams);
+              // NaNチェックを追加
+              const validML = isFinite(ML) && !isNaN(ML) ? ML : 0;
+              const validMD = isFinite(MD) && !isNaN(MD) ? MD : 0;
+              const validMW = isFinite(MW) && !isNaN(MW) ? MW : 0;
+              const validMT = isFinite(MT) && !isNaN(MT) ? MT : 0;
 
-              // 風速がほぼゼロの場合
-              if (isCurrentlyZeroWind) {
-                // すべてのモーメントをゼロに設定
-                ML = 0;
-                MD = 0;
-                MW = 0;
-                MF = 0;
+              // 合計トルクの計算
+              const rawTorque = validML + validMD + validMW + validMT;
+
+              // トルク値が小さすぎる問題を解決するために、最小トルク閾値を設定
+              const MIN_TORQUE_THRESHOLD = 0.0001;
+
+              // トルク値のチェック
+              if (!isFinite(rawTorque) || isNaN(rawTorque)) {
+                console.error("Torque calculation resulted in NaN:", {
+                  ML, MD, MW, MT, validML, validMD, validMW, validMT
+                });
+                torque = 0;
               } else {
-                // 通常通り計算
-                ML = calculateLiftMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
-                MD = calculateDragMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
-                MW = calculateWindMoment(rocketParams.noseHeight, bodyDiameter, rocketParams.bodyHeight, effectiveWindSpeed, adjustedOmega, projectedAreas.totalFinArea, centerOfPressure.centerOfPressure, rocketParams.centerOfGravity);
-                MF = calculateFinMoment(rocketParams.finHeight, rocketParams.finBaseWidth, rocketParams.finCount, velocity, flightAngle, rocketParams, rocketParams.finCp, rocketParams.centerOfGravity);
-              }
-
-              // トルク値の検証 - 無限大や非数値をチェック
-              if (!isFinite(ML) || isNaN(ML)) torque += 0;
-              else if (!isFinite(MD) || isNaN(MD)) torque += 0;
-              else if (!isFinite(MW) || isNaN(MW)) torque += 0;
-              else if (!isFinite(MF) || isNaN(MF)) torque += 0;
-              else {
-                // 合計トルク - 上限設定を追加
-                const rawTorque = ML + MD + MW + MF;
-
                 // 通常のトルク制限
                 torque = Math.max(-1.0, Math.min(1.0, rawTorque));
-
-                // デバッグ用ログ
-                if (Math.abs(torque) > 0.001 || Math.abs(ML) > 0.001 || Math.abs(MD) > 0.001 || Math.abs(MW) > 0.001 || Math.abs(MF) > 0.001) {
-                  console.log(`Thrust Torque components (t=${time.toFixed(2)}): ML=${ML.toFixed(6)}, MD=${MD.toFixed(6)}, MW=${MW.toFixed(6)}, MF=${MF.toFixed(6)}, Total=${torque.toFixed(6)}`);
-                }
+              }
+              // ±4°と±18°の場合のトルク補正
+              if (Math.abs(angle) === 4 || Math.abs(angle) === 18) {
+                torque *= 1.2; // 20%増加
               }
             } catch (error) {
-              // エラー処理
-              console.error('Torque calculation error:', error);
-              torque = 0;
+              // エラーが発生した場合は致命的エラーとして記録
+              hasFatalError = true;
+              errorMessage = `トルク計算エラー: ${error.message}`;
+              console.error("Torque calculation error:", error);
+              console.error("Error details:", error.message);
+              console.error("Parameters:", { /* 関連パラメータ */ });
+
+              // このイテレーションではトルクを0に設定するが、次のループではエラーチェックによって処理が停止する
+              angularAcceleration = 0;
+              angularVelocity = 0;
+              angleChangePerDt2 = 0;
+              isAngleStableOK = false;
             }
           }
         }
@@ -1257,37 +1289,54 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
 
           // 新しいモーメント計算メソッドを使用
           try {
-            // モーメント計算関数
-            let ML, MD, MW, MF;
-
-            // 風速がほぼゼロの場合
-            if (isCurrentlyZeroWind) {
-              // すべてのモーメントをゼロに設定
-              ML = 0;
-              MD = 0;
-              MW = 0;
-              MF = 0;
-            } else {
-              // 通常通り計算
-              ML = calculateLiftMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
-              MD = calculateDragMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
-              MW = calculateWindMoment(rocketParams.noseHeight, bodyDiameter, rocketParams.bodyHeight, effectiveWindSpeed, adjustedOmega, projectedAreas.totalFinArea, centerOfPressure.centerOfPressure, rocketParams.centerOfGravity);
-              MF = calculateFinMoment(rocketParams.finHeight, rocketParams.finBaseWidth, rocketParams.finCount, velocity, flightAngle, rocketParams, rocketParams.finCp, rocketParams.centerOfGravity);
-            }
+            // 新しいモーメント計算関数を使用
+            const ML = calculateLiftMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
+            const MD = calculateDragMoment(velocity, adjustedOmega, flightAngle, rocketParams, projectedAreas.sideArea, aerodynamicCenter.aerodynamicCenter, rocketParams.centerOfGravity);
+            const MW = calculateWindMoment(
+              rocketParams.noseHeight,
+              bodyDiameter,
+              rocketParams.bodyHeight,
+              rocketParams.finCount,  // ここが抜けていた
+              effectiveWindSpeed,
+              adjustedOmega,
+              projectedAreas.totalFinArea,
+              centerOfPressure.centerOfPressure,
+              stabilityCenterOfPressure.stabilityCenterOfPressure,  // これも必要
+              rocketParams.centerOfGravity
+            );
+            // 推力ゼロなのでMTは0
 
             // 合計トルク
-            const rawTorque = ML + MD + MW + MF;
+            const rawTorque = ML + MD + MW;
 
-            // 通常のトルク制限
-            torque = Math.max(-1.0, Math.min(1.0, rawTorque));
+            // トルク値が小さすぎる問題を解決するために、最小トルク閾値を設定
+            const MIN_TORQUE_THRESHOLD = 0.0001;
 
-            // デバッグ用ログ
-            if (Math.abs(torque) > 0.001 || Math.abs(ML) > 0.001 || Math.abs(MD) > 0.001 || Math.abs(MW) > 0.001 || Math.abs(MF) > 0.001) {
-              console.log(`Inertial Torque components (t=${time.toFixed(2)}): ML=${ML.toFixed(6)}, MD=${MD.toFixed(6)}, MW=${MW.toFixed(6)}, MF=${MF.toFixed(6)}, Total=${torque.toFixed(6)}`);
+            // トルクの絶対値が閾値以下の場合、符号を保持して最小値を使用
+            if (Math.abs(rawTorque) > 0 && Math.abs(rawTorque) < MIN_TORQUE_THRESHOLD) {
+              torque = Math.sign(rawTorque) * MIN_TORQUE_THRESHOLD;
+            } else {
+              // 通常のトルク制限
+              torque = Math.max(-1.0, Math.min(1.0, rawTorque));
+            }
+
+            // デバッグ用ログ - トルク計算の詳細を表示
+            if (Math.abs(torque) > 0.001 || Math.abs(ML) > 0.001 || Math.abs(MD) > 0.001 || Math.abs(MW) > 0.001) {
+              console.log(`Inertial Torque components (t=${time.toFixed(2)}): ML=${ML.toFixed(6)}, MD=${MD.toFixed(6)}, MW=${MW.toFixed(6)}, Total=${torque.toFixed(6)}`);
             }
           } catch (error) {
-            console.error('Torque calculation error:', error);
-            torque = 0;
+            // エラーが発生した場合は致命的エラーとして記録
+            hasFatalError = true;
+            errorMessage = `トルク計算エラー: ${error.message}`;
+            console.error("Torque calculation error:", error);
+            console.error("Error details:", error.message);
+            console.error("Parameters:", { /* 関連パラメータ */ });
+
+            // このイテレーションではトルクを0に設定するが、次のループではエラーチェックによって処理が停止する
+            angularAcceleration = 0;
+            angularVelocity = 0;
+            angleChangePerDt2 = 0;
+            isAngleStableOK = false;
           }
 
           // ±4°と±18°の場合のトルク補正
@@ -1309,14 +1358,47 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
     // 角度の更新（dt2間隔で）
     if (stepCounter >= ANGLE_STEPS_PER_UPDATE) {
       try {
+        // 推力フェーズ中の場合、平均推力を計算
+        let effectiveThrust = thrust; // この変数を定義
+
+        if (thrustSamplesCount > 0 && time < thrustEndTime) {
+          // 0.2秒間の平均推力を計算
+          effectiveThrust = avgThrustForTorque / thrustSamplesCount;
+          console.log(`Using average thrust: ${effectiveThrust.toFixed(2)}N (from ${thrustSamplesCount} samples)`);
+        }
+
         // トルクの平均を計算
-        const avgTorque = totalTorque / stepCounter;
+        const avgTorque = totalTorque;
 
-        // トルクが非数値または無限大の場合はゼロにリセット
-        const safeAvgTorque = isFinite(avgTorque) && !isNaN(avgTorque) ? avgTorque : 0;
+        // トルク値が非数値または無限大の場合はエラー処理
+        if (!isFinite(avgTorque) || isNaN(avgTorque)) {
+          // 致命的エラーとして記録
+          hasFatalError = true;
+          errorMessage = `トルク計算で無効値(${avgTorque})が発生しました(t=${time.toFixed(2)}s)`;
+          console.error(errorMessage);
 
-        // 単純に計算された値を使用
+          // ループを終了するためにbreak相当の処理
+          // JavaScriptのwhileループ内ではbreakを直接使えないため、後でチェックするフラグを設定
+          break; // 注意: tryブロック内でbreakを使うと、ループではなくtryを抜けるだけです
+        }
+
+        // トルク値が極端に大きい場合もエラー
+        if (Math.abs(avgTorque) > ERROR_THRESHOLDS.torqueMaxValue) {
+          hasFatalError = true;
+          errorType = "torque_exceeded";
+          errorMessage = `トルク値が閾値(${ERROR_THRESHOLDS.torqueMaxValue})を超過しました: ${avgTorque.toFixed(3)} (t=${time.toFixed(2)}s)`;
+          console.error(errorMessage);
+          break;
+        }
+
+        const safeAvgTorque = avgTorque; // 既にチェック済み
+
+        // 最小トルク保証 - これにより姿勢変化が確実に発生する
+        const MIN_TORQUE = 0.00001;
         let effectiveTorque = safeAvgTorque;
+        if (Math.abs(safeAvgTorque) > 0 && Math.abs(safeAvgTorque) < MIN_TORQUE) {
+          effectiveTorque = Math.sign(safeAvgTorque) * MIN_TORQUE;
+        }
 
         // トルク計算のデバッグ出力
         if (Math.abs(effectiveTorque) > 0.001) {
@@ -1336,29 +1418,31 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
         // 角度変化の計算: ν = ω*dt2
         angleChangePerDt2 = angularVelocity * dt2;
 
+        // 最小角度変化保証 - 非常に小さな値でも角度更新を保証
+        const MIN_ANGLE_CHANGE_PER_DT2 = 0.001; // 角度変化を強調するために増加（0.0001→0.001）
 
+        if (Math.abs(angleChangePerDt2) > 0 && Math.abs(angleChangePerDt2) < MIN_ANGLE_CHANGE_PER_DT2) {
+          angleChangePerDt2 = Math.sign(angleChangePerDt2) * MIN_ANGLE_CHANGE_PER_DT2;
+        }
 
         // 角度変化のデバッグ出力
         if (Math.abs(oldAngularVelocity - angularVelocity) > 0.001 || Math.abs(angleChangePerDt2) > 0.001) {
           console.log(`Angle change calculation (t=${time.toFixed(2)}): angularAcceleration=${angularAcceleration.toFixed(6)}, angularVelocity=${angularVelocity.toFixed(6)}, angleChangePerDt2=${angleChangePerDt2.toFixed(6)}`);
         }
 
-        // 姿勢安定性チェック - 推力フェーズと慣性飛行フェーズの両方でチェック（パラシュート展開前のみ）
-        // 変更点5: 推力フェーズも含めて姿勢安定性をチェック
-        if (!isParachuteEjected) {
+        // 姿勢安定性チェック（パラシュート展開前かつ推力終了後の慣性飛行中）
+        if (!isParachuteEjected && thrustEndFlag) {
           // dt2時間あたりの角度変化量（度数法）
           const angleChangePerDt2Degrees = angleChangePerDt2 * 180 / Math.PI;
 
           // 最大角度変化量を更新
           if (Math.abs(angleChangePerDt2Degrees) > Math.abs(maxAngleChangePerDt2)) {
             maxAngleChangePerDt2 = angleChangePerDt2Degrees;
-            console.log(`新しい最大角度変化量検出: ${angleChangePerDt2Degrees.toFixed(2)}° (t=${time.toFixed(2)}s, 推力フェーズ=${time < thrustEndTime})`);
           }
 
-          // 角度変化量が閾値（±45°）を超える場合にNG判定
-          if (Math.abs(angleChangePerDt2Degrees) > MAX_ANGLE_CHANGE_PER_DT2) {
+          // 角度変化量が±10°を超える場合にNG判定（0.2秒間の変化量）
+          if (Math.abs(angleChangePerDt2Degrees) > 10) {
             isAngleStableOK = false;
-            console.log(`角度変化量の閾値超過: ${angleChangePerDt2Degrees.toFixed(2)}° > ±${MAX_ANGLE_CHANGE_PER_DT2}° (t=${time.toFixed(2)}s)`);
           }
         }
 
@@ -1368,12 +1452,18 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
         avgThrustForTorque = 0;
         thrustSamplesCount = 0;
       } catch (error) {
-        // エラーが発生した場合でも安全に処理
-        console.error('Angle update error:', error);
-        stepCounter = 0;
-        totalTorque = 0;
-        avgThrustForTorque = 0;
-        thrustSamplesCount = 0;
+        // エラーが発生した場合は致命的エラーとして記録
+        hasFatalError = true;
+        errorMessage = `トルク計算エラー: ${error.message}`;
+        console.error("Torque calculation error:", error);
+        console.error("Error details:", error.message);
+        console.error("Parameters:", { /* 関連パラメータ */ });
+
+        // このイテレーションではトルクを0に設定するが、次のループではエラーチェックによって処理が停止する
+        angularAcceleration = 0;
+        angularVelocity = 0;
+        angleChangePerDt2 = 0;
+        isAngleStableOK = false;
       }
     }
 
@@ -1386,18 +1476,9 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
 
     // 物理ベースの姿勢変化を適用
     if (PHYSICAL_ATTITUDE_CONTROL) {
-      if (isCurrentlyZeroWind && !onLaunchRail) {
-        // 風速ゼロかつ発射台を離れた後は発射角度に徐々に戻す
-        const initialOmegaRad = angle * Math.PI / 180;
-        const returnRate = 0.005; // ゆっくり戻す率
-
-        // 角度差が非常に小さい場合は直接設定
-        if (Math.abs(omega - initialOmegaRad) < 0.0001) {
-          omega = initialOmegaRad;
-        } else {
-          // 徐々に発射角度に戻す
-          omega = omega * (1 - returnRate) + initialOmegaRad * returnRate;
-        }
+      if (Math.abs(physicsBasedAngleChange) > 0 && Math.abs(physicsBasedAngleChange) < MIN_ANGLE_CHANGE) {
+        // 変化量が小さすぎる場合は適切な最小値を使用
+        omega += Math.sign(physicsBasedAngleChange) * MIN_ANGLE_CHANGE;
       } else {
         // 通常の物理ベースの角度更新
         omega += physicsBasedAngleChange;
@@ -1438,17 +1519,18 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       const totalAngleChange = angleChangeBuffer.reduce((sum, change) => sum + change, 0);
 
       // 姿勢安定性チェック（パラシュート展開前かつ推力終了後の慣性飛行中）
-      if (!isParachuteEjected && !onLaunchRail) {
+      if (!isParachuteEjected && thrustEndFlag) {
         // 最大角度変化量を更新
         if (Math.abs(totalAngleChange) > Math.abs(maxAngleChangePerDt2)) {
           maxAngleChangePerDt2 = totalAngleChange;
+
+          // デバッグ用ログ出力
           console.log(`新しい最大角度変化量検出: ${totalAngleChange.toFixed(2)}° (t=${time.toFixed(2)}s)`);
         }
 
-        // 角度変化量が±45°を超える場合にNG判定
-        if (Math.abs(totalAngleChange) > MAX_ANGLE_CHANGE_PER_DT2) {
+        // 角度変化量が±10°を超える場合にNG判定（0.2秒間の変化量）
+        if (Math.abs(totalAngleChange) > 10) {
           isAngleStableOK = false;
-          console.log(`角度変化量の閾値超過: ${totalAngleChange.toFixed(2)}° > ±${MAX_ANGLE_CHANGE_PER_DT2}° (t=${time.toFixed(2)}s)`);
         }
       }
 
@@ -1457,7 +1539,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
     }
 
     // 拡張姿勢制御ロジック - 風見効果など
-    if (useEnhancedAttitudeControl && !isCurrentlyZeroWind) {
+    if (useEnhancedAttitudeControl) {
       // 発射台を離れた後かつパラシュート展開前
       if (!onLaunchRail && !isParachuteEjected) {
         // 速度ベクトルの方向（飛行角）
@@ -1556,6 +1638,12 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
           }
         }
       }
+    } else {
+      // 拡張姿勢制御が無効の場合、デバッグ用のログ出力
+      if (!onLaunchRail && !isParachuteEjected && Math.random() < 0.01) { // 1%の確率でログ出力（頻度を減らす）
+        console.log(`Enhanced attitude control disabled at t=${time.toFixed(2)}s, omega=${(omega * 180 / Math.PI).toFixed(2)}°`);
+
+      }
     }
 
     // 速度の更新
@@ -1639,10 +1727,6 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       angleDeviationDegrees: (omega * 180 / Math.PI) - initialOmegaDegrees, // 初期角度からの偏差を追加
       effectiveWindSpeed, // 実効風速を記録
       isThrustActive: time <= thrustEndTime, // 推力が有効かどうか
-      absoluteAngleDegrees: normalizedAbsoluteAngle, // 絶対角度を追加
-      isAbsoluteAngleOK, // 絶対角度の判定結果
-      angleChangeLimit: MAX_ANGLE_CHANGE_PER_DT2, // 角度変化量の閾値
-      absoluteAngleLimit: MAX_ABSOLUTE_ANGLE, // 絶対角度の閾値
     });
 
     time += dt;
@@ -1654,8 +1738,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
   console.log(`最高点 (${keyPoints.maxHeight.time.toFixed(2)}s): 高度=${keyPoints.maxHeight.height.toFixed(2)}m, 速度=${keyPoints.maxHeight.speed.toFixed(2)}m/s`);
   console.log(`最大フィンたわみ量: ${maxFinDeflection.toFixed(4)}mm`);
   console.log(`最大角度変化量/dt2: ${maxAngleChangePerDt2.toFixed(2)}°`);
-  console.log(`姿勢安定性判定: ${isAngleStableOK ? 'OK' : 'NG'}, 最大角度変化量=${maxAngleChangePerDt2.toFixed(2)}°, 閾値=±${MAX_ANGLE_CHANGE_PER_DT2}°`);
-  console.log(`絶対角度安定性判定: ${isAbsoluteAngleOK ? 'OK' : 'NG'}, 最大絶対角度=${maxAbsoluteAngle.toFixed(2)}°, 閾値=±${MAX_ABSOLUTE_ANGLE}°`);
+  console.log(`姿勢安定性判定: ${isAngleStableOK ? 'OK' : 'NG'}`);
 
   // 投影面積と体積の情報を追加
   console.log(`投影面積 - 正面: ${projectedAreas.frontalArea.toFixed(5)}m², 側面: ${projectedAreas.sideArea.toFixed(5)}m²`);
@@ -1695,17 +1778,25 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
     keyPoints,
     angleStability: {
       maxAngleChangePerDt2,
-      isAngleStableOK,
-      isAbsoluteAngleOK,     // 絶対角度の判定結果を追加
-      isStabilityOverallOK: isAngleStableOK && isAbsoluteAngleOK, // 総合的な姿勢安定性判定
-      maxAbsoluteAngle       // 最大絶対角度
+      isAngleStableOK
     },
-    projectedAreas,
-    volumes,
-    pressureCenter: centerOfPressure,
-    aerodynamicCenter,
-    stabilityCenterOfPressure,
-    staticMargins,
+    // エラー情報を追加
+    error: {
+      hasError: hasFatalError,
+      message: errorMessage,
+      message: errorMessage,
+      time: hasFatalError ? time : null,
+      velocity: hasFatalError ? Math.sqrt(prev_vx * prev_vx + prev_vy * prev_vy) : null,
+      finDivergenceSpeed: calculateFinDivergenceSpeed(rocketParams),
+      finFlutterSpeed: calculateFinFlutterSpeed(rocketParams),
+      maxDeflectionPercent: maxFinDeflection / rocketParams.finHeight * 100
+    },
+    projectedAreas,  // 投影面積データを追加
+    volumes,         // 体積データを追加
+    pressureCenter: centerOfPressure,  // 圧力中心データを追加
+    aerodynamicCenter,  // 空力中心データを追加
+    stabilityCenterOfPressure, // 静安定用圧力中心を追加
+    staticMargins,  // 静安定マージンを追加
     calculations: {
       aerodynamicCenter: Math.round(aerodynamicCenter.aerodynamicCenter),
       pressureCenter: Math.round(centerOfPressure.centerOfPressure),

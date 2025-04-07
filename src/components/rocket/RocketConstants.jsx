@@ -25,9 +25,9 @@ export const PARACHUTE_SIZES = {
 
 // フィン材料のデータ
 export const FIN_MATERIALS = {
-  'light_balsa': { name: '軽量バルサ', E: 2450000000, G: 85750000 },
-  'balsa': { name: 'バルサ', E: 3000000000, G: 120000000 },
-  'light_veneer': { name: '軽量ベニア', E: 8000000000, G: 450000000 }
+  'light_balsa': { name: '軽量バルサ', E: 2450000000, G: 85750000 , MD: 60 }, // 60～200 kg/m³
+  'balsa': { name: 'バルサ', E: 3000000000, G: 120000000 , MD: 125 }, // 60～200 kg/m³
+  'light_veneer': { name: '軽量ベニア', E: 8000000000, G: 450000000 , MD: 500 } // 400～600 kg/m³
 };
 
 // ノーズ形状と抗力係数
