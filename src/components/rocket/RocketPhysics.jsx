@@ -7,7 +7,7 @@ import {
 
 // 物理制御と拡張制御を分離する定数を追加
 export const PHYSICAL_ATTITUDE_CONTROL = true;  // 物理ベースの姿勢制御 (常に有効にすべき)
-export const ENHANCED_ATTITUDE_CONTROL = true;  // 拡張姿勢制御 (風見効果など)
+export const ENHANCED_ATTITUDE_CONTROL = false;  // 拡張姿勢制御 (風見効果など)
 export const WIND_ANGLE_LIMITATION = false;  // 風向きによる角度制限（90度制限）
 
 // ロケットの投影面積を計算する関数
@@ -967,6 +967,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
   const g = 9.81; // m/s²
 
   // 記録用変数
+  let prec_MaxHeight = 0;
   let maxHeight = 0;
   let maxSpeed = 0;
   let maxDistance = 0; // 最大水平距離を記録
@@ -975,6 +976,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
   // キーポイント記録
   let keyPoints = {
     thrustEnd: { time: 0, height: 0, speed: 0 },
+    prec_MaxHeight: { time: 0, height: 0, speed: 0 },
     maxHeight: { time: 0, height: 0, speed: 0 },
     parachuteEjection: { time: 0, height: 0, speed: 0 },
     parachuteActive: { time: 0, height: 0, speed: 0 }
@@ -1594,6 +1596,12 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       y = y + vy * dt;
     }
 
+    // 事前計算での最高高度と最高速度の更新
+    if (y > prec_MaxHeight) {
+      prec_MaxHeight = y;
+      keyPoints.prec_MaxHeight = { time, height: prec_MaxHeight, speed: vy };
+    }
+
     // 最高高度と最高速度の更新
     if (y > maxHeight) {
       maxHeight = y;
@@ -1688,6 +1696,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
 
   return {
     data,
+    prec_MaxHeight,
     maxHeight,
     maxSpeed,
     maxDistance,

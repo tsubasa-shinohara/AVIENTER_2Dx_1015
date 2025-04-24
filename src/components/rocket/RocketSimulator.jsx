@@ -33,6 +33,9 @@ import {
   ParameterSlider, DesignTab, AnalysisTab, SimulationTab
 } from './RocketUIComponents';
 
+// シミュレーションタブの事前計算のインポート
+import { usePreFlightRocketSim } from './RocketUIPreCalu'
+
 // 新しい着地予測関連のインポートを追加
 import { predictLanding, calculateFlightPathWithLanding } from './RocketLandingPrediction';
 
@@ -131,6 +134,11 @@ const useRocketSimulator = () => {
   const [currentMaxFinDeflection, setCurrentMaxFinDeflection] = useState(0);
   const [completedFlights, setCompletedFlights] = useState([]);
   const [keyPoints, setKeyPoints] = useState({});
+
+  // useRocketSimulator 内で、他の状態変数と一緒に追加
+  const [maxHeight, setMaxHeight] = useState(0);
+  const [prec_MaxHeight, setPrec_MaxHeight] = useState(0);
+  const [isPreLaunched, setIsPreLaunched] = useState(false);
 
   // 状態変数の追加
   const [showResultsPopup, setShowResultsPopup] = useState(false);
@@ -591,6 +599,101 @@ const useRocketSimulator = () => {
     return powerFactors[motorType] || 0.5; // デフォルト値も調整
   };
 
+  const recalculateFlightPath = useCallback(() => {
+    console.log('飛行経路を再計算します');
+
+    try {
+      // 現在進行中のアニメーションがあれば中止する
+      if (isLaunched && animationId) {
+        cancelAnimationFrame(animationId);
+        setAnimationId(null);
+        setIsLaunched(false);
+      }
+
+      // 風速プロファイルを引数として渡す
+      const preFlight = calculateFlightPath(
+        simulationParams,
+        launchAngle,
+        windSpeed,
+        windProfile,
+        {
+          ...SVG_CONFIG,
+          enhancedAttitudeControl,
+          windAngleLimitation
+        }
+      );
+
+      if (preFlight && preFlight.prec_MaxHeight > 0) {
+        // 最大高度を保存 - この行が重要
+        //console.log(`最大高度を更新: ${preFlight.prec_MaxHeight}m`);
+        //setPrec_MaxHeight(preFlight.prec_MaxHeight);
+
+        const availableHeight = SVG_CONFIG.height - SVG_CONFIG.groundLevel;
+
+        // 改良：より高いベース高さを設定
+        const baseHeights = {
+          '1/2A6-2': 100,
+          'A8-3': 150,
+          'B6-4': 200
+        };
+
+        const expectedBaseHeight = baseHeights[simulationParams.selectedMotor] || 150;
+        const targetHeight = Math.max(preFlight.maxHeight * 1.3, expectedBaseHeight);
+
+        const minHorizontalDistance = expectedBaseHeight * 0.9;
+        const maxDistance = Math.max(preFlight.maxDistance || 0, minHorizontalDistance);
+
+        // スケール計算
+        const verticalScale = availableHeight / targetHeight;
+        const horizontalScale = (SVG_CONFIG.width * 0.9) / (maxDistance * 2 || 1);
+
+        const motorPowerFactor = {
+          '1/2A6-2': 0.45,
+          'A8-3': 0.35,
+          'B6-4': 0.25
+        };
+
+        const powerFactor = motorPowerFactor[simulationParams.selectedMotor] || 0.35;
+
+        // 最小/最大スケール値の調整
+        const minScale = 10;
+        const maxScale = 24;
+
+        const rawScale = Math.min(verticalScale, horizontalScale) * powerFactor;
+        // 最終スケールを調整 - 必ず最小スケールを適用
+        const finalScale = Math.max(minScale, Math.min(maxScale, rawScale));
+
+        // スケール設定
+        setTrajectoryScale(finalScale);
+
+        // ロケットスケールをさらに小さく
+        const baseRocketScale = 0.03;
+        setRocketScale(baseRocketScale * powerFactor);
+
+        console.log(`計算完了: 高度=${preFlight.prec_MaxHeight.toFixed(1)}m, スケール=${finalScale.toFixed(2)}`);
+        return true;
+      }
+    } catch (error) {
+      console.error('飛行経路計算エラー:', error);
+    }
+
+    // 失敗した場合はデフォルト値を設定
+    setMaxHeight(0);
+
+    // デフォルトスケールを設定
+    const defaultScale = getInitialScaleForMotor(selectedMotor);
+    setTrajectoryScale(defaultScale);
+
+    // シミュレーションタブ描画にかかる事前計算をOn
+    setIsPreLaunched(true);
+
+    return false;
+  }, [
+    simulationParams, launchAngle, windSpeed, windProfile,
+    enhancedAttitudeControl, windAngleLimitation,
+    isPreLaunched, animationId, selectedMotor
+  ]);
+
   // リセット関数を強化
   const handleReset = useCallback(() => {
     console.log('リセット処理開始');
@@ -648,6 +751,13 @@ const useRocketSimulator = () => {
   }, [flightResults]);
 
   const handleLaunch = useCallback(() => {
+
+    if (isLaunched === true) {
+      console.log('すでにisLaunchedがtrueになってるよ!!!!!!!!');
+    } else {
+      console.log('打上げの計算が進んでるね。。。。');
+    }
+
     if (isLaunched) return;
 
     try {
@@ -693,6 +803,16 @@ const useRocketSimulator = () => {
         setShowResultsPopup(true);
         return; // 早期リターンでこれ以上の処理を行わない
       }
+
+      // 事前計算に最大高度を保存 - これが重要2
+      if (flight && flight.prec_MaxHeight > 0) {
+        setPrec_MaxHeight(flight.prec_MaxHeight);
+      }
+
+      // 最大高度を保存 - これが重要
+      //if (flight && flight.maxHeight > 0) {
+      //  setMaxHeight(flight.maxHeight);
+      //}
 
       // 初期データを取得（最初のフレーム用）
       const initialData = flight.data[0];
@@ -1009,6 +1129,9 @@ const useRocketSimulator = () => {
     currentMaxHeight, currentMaxSpeed, currentMaxDistance, currentMaxFinDeflection,
     completedFlights, keyPoints,
 
+    recalculateFlightPath,
+    //prec_MaxHeight, // maxHeightも外部に公開
+
     // 表示設定
     design, analysis,
     trajectoryScale, rocketScale,
@@ -1093,15 +1216,33 @@ const IntegratedRocketSimulator = () => {
   // 開発モードのステートを定数から初期化し、キーボードショートカットでの切り替えを無効化
   const [devMode, setDevMode] = useState(ENABLE_DEV_MODE);
 
-  // 開発モードが有効な場合のみコンソールにログを出力（オプション）
-  useEffect(() => {
-    if (ENABLE_DEV_MODE) {
-      console.log('開発モードが有効です');
-    }
-  }, []);
-
   // ロケットシミュレーターフックを使用
   const rocketSim = useRocketSimulator();
+
+  const preRocketSim = usePreFlightRocketSim();
+
+  // タブ切り替え処理関数
+  const handleTabChange = useCallback((newTab) => {
+    console.log(`タブ切り替え処理: ${activeTab} -> ${newTab}`);
+
+    // シミュレーションタブに切り替える場合は計算を実行
+    if (newTab === 'simulation' && preRocketSim.preCalculateFlightPath) {
+      console.log('シミュレーション用の計算を実行します');
+      preRocketSim.preCalculateFlightPath();
+    }
+
+    // タブを更新
+    setActiveTab(newTab);
+  }, [activeTab, preRocketSim]);
+
+  // 開発モードが有効な場合のみコンソールにログを出力（オプション）←←←←←←←←こいつを外すととりあえず発射できる！！！！！
+  //useEffect(() => {
+  //  // 初回レンダリング時、またはrocketSimが変更された時に初期計算を実行
+  //  if (activeTab === 'simulation') {
+  //    console.log('初期計算を実行します');
+  //    rocketSim.recalculateFlightPath();
+  //  }
+  //}, [rocketSim, activeTab]);
 
   const navigate = useNavigate();
   // ログアウト処理
@@ -1122,19 +1263,19 @@ const IntegratedRocketSimulator = () => {
       <div className="flex border-b mb-6">
         <button
           className={`px-6 py-3 font-medium ${activeTab === 'design' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg`}
-          onClick={() => setActiveTab('design')}
+          onClick={() => handleTabChange('design')}
         >
           形状設計
         </button>
         <button
           className={`px-6 py-3 font-medium ${activeTab === 'analysis' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
-          onClick={() => setActiveTab('analysis')}
+          onClick={() => handleTabChange('analysis')}
         >
           重量・空力特性
         </button>
         <button
           className={`px-6 py-3 font-medium ${activeTab === 'simulation' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
-          onClick={() => setActiveTab('simulation')}
+          onClick={() => handleTabChange('simulation')}
         >
           飛行シミュレーション
         </button>
@@ -1143,7 +1284,7 @@ const IntegratedRocketSimulator = () => {
       <div>
         {activeTab === 'design' && <DesignTab rocketSim={rocketSim} />}
         {activeTab === 'analysis' && <AnalysisTab rocketSim={rocketSim} getSafeValue={getSafeValue} />}
-        {activeTab === 'simulation' && <SimulationTab rocketSim={rocketSim} debugView={debugView} setDebugView={setDebugView} devMode={devMode} />}
+        {activeTab === 'simulation' && <SimulationTab rocketSim={rocketSim} preRocketSim={preRocketSim} debugView={debugView} setDebugView={setDebugView} devMode={devMode} />}
       </div>
 
       {/* 開発モード表示 - 開発モード時のみ表示 */}
