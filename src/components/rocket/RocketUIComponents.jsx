@@ -1068,11 +1068,21 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
   const position = rocketSim.getCurrentPosition();
   const windArrow = rocketSim.getWindArrow(rocketSim.windSpeed);
 
-  // 飛翔軌跡を描くエリアの高さを決める関数
-  const viewHeight = preRocketSim.prec_MaxHeight * 1.1 + SVG_CONFIG.groundLevel; // 少し余裕を持たせる
-  console.log("viewHeight:", viewHeight, "prec_MaxHeight:", preRocketSim.prec_MaxHeight);
-  const graundHeight = 50;
-  const trajectoryDisplayHeight = viewHeight * 1.1 + graundHeight + 35; // 高さに対する倍率（自由に調整可能）
+  // 飛翔軌跡を描くエリアの高さをuseMemoでメモ化
+  const { viewHeight, trajectoryDisplayHeight } = useMemo(() => {
+    // nullまたは不正な値のチェック
+    const maxHeightValue = preRocketSim.prec_MaxHeight > 0 ? preRocketSim.prec_MaxHeight : 100;
+    const calculatedViewHeight = maxHeightValue * 1.1 + SVG_CONFIG.groundLevel;
+    const groundHeight = 50;
+    const displayHeight = calculatedViewHeight * 1.1 + groundHeight + 100;
+
+    console.log("ViewBox計算: 高さ=", calculatedViewHeight, "prec_MaxHeight=", maxHeightValue);
+
+    return {
+      viewHeight: calculatedViewHeight,
+      trajectoryDisplayHeight: displayHeight
+    };
+  }, [preRocketSim.prec_MaxHeight]); // 依存配列にprec_MaxHeightのみを含める
 
   // 姿勢表示用のロケットスケール計算の改良
   const calculateAttitudeDisplayScale = (rocketParams, circleRadius = 90) => {

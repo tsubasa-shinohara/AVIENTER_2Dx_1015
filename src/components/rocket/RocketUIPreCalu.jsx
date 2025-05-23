@@ -152,7 +152,7 @@ export const usePreFlightRocketSim = () => {
   const [showLandingPrediction, setShowLandingPrediction] = useState(true);
 
   // 物理計算のための全パラメータをまとめる
-  const simulationParams = useMemo(() => ({
+  const preSimParams = useMemo(() => ({
     noseShape,
     noseHeight,
     bodyHeight,
@@ -188,8 +188,6 @@ export const usePreFlightRocketSim = () => {
     centerX: UI_CONFIG.analysisViewWidth / 2
   }), []);
 
-
-
   // 実際のロケット寸法を計算するためのラッパー
   const getRocketDimensions = useCallback((config) => {
     return getActualRocketDimensions(
@@ -198,7 +196,7 @@ export const usePreFlightRocketSim = () => {
     );
   }, [noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth]);
 
-    // 現在の位置情報を取得
+  // 現在の位置情報を取得
   const getCurrentPosition = useCallback(() => {
     if (!isLaunched || !preFlightData || preFlightData.length === 0) {
       // 初期状態・未発射状態
@@ -297,8 +295,9 @@ export const usePreFlightRocketSim = () => {
     return powerFactors[motorType] || 0.5; // デフォルト値も調整
   };
 
+  // preCalculateFlightPath関数の修正
   const preCalculateFlightPath = useCallback(() => {
-    console.log('飛行経路を再計算します');
+    console.log('事前飛行経路を再計算します');
 
     try {
       // 現在進行中のアニメーションがあれば中止する
@@ -310,7 +309,7 @@ export const usePreFlightRocketSim = () => {
 
       // 風速プロファイルを引数として渡す
       const preFlight = calculateFlightPath(
-        simulationParams,
+        preSimParams,
         launchAngle,
         windSpeed,
         windProfile,
@@ -321,12 +320,22 @@ export const usePreFlightRocketSim = () => {
         }
       );
 
+
+
+
+
+
+
       if (preFlight && preFlight.prec_MaxHeight > 0) {
         // 最大高度を保存 - この行が重要
         console.log(`最大高度を更新: ${preFlight.prec_MaxHeight}m`);
-        setPrec_MaxHeight(preFlight.prec_MaxHeight);
+        // ここで直接更新せず、値を保持
+        const newMaxHeight = preFlight.prec_MaxHeight;
 
-        const availableHeight = SVG_CONFIG.height - SVG_CONFIG.groundLevel;
+
+
+
+
 
         // 改良：より高いベース高さを設定
         const baseHeights = {
@@ -335,7 +344,7 @@ export const usePreFlightRocketSim = () => {
           'B6-4': 200
         };
 
-        const expectedBaseHeight = baseHeights[simulationParams.selectedMotor] || 150;
+        const expectedBaseHeight = baseHeights[preSimParams.selectedMotor] || 150;
         const targetHeight = Math.max(preFlight.maxHeight * 1.3, expectedBaseHeight);
 
         const minHorizontalDistance = expectedBaseHeight * 0.9;
@@ -351,46 +360,154 @@ export const usePreFlightRocketSim = () => {
           'B6-4': 0.25
         };
 
-        const powerFactor = motorPowerFactor[simulationParams.selectedMotor] || 0.35;
+        const powerFactor = motorPowerFactor[preSimParams.selectedMotor] || 0.35;
 
         // 最小/最大スケール値の調整
         const minScale = 10;
         const maxScale = 24;
 
+        const baseRocketScale = 0.03;
+
         const rawScale = Math.min(verticalScale, horizontalScale) * powerFactor;
         // 最終スケールを調整 - 必ず最小スケールを適用
         const finalScale = Math.max(minScale, Math.min(maxScale, rawScale));
 
-        // スケール設定
-        setTrajectoryScale(finalScale);
 
-        // ロケットスケールをさらに小さく
-        const baseRocketScale = 0.03;
+
+        // 状態更新の部分を分離 - 結果を返すよう変更
+        const results = {
+          prec_MaxHeight: newMaxHeight,
+          maxDistance: preFlight.maxDistance || 0,
+          finalScale: finalScale, // 計算した最終スケール
+          rocketScale: baseRocketScale * powerFactor
+        };
+
+
+
+        // 閾値による更新制限
+        const diff = Math.abs(newMaxHeight - prec_MaxHeight);
+        const threshold = 0.5; // 0.5m以上の差がある場合のみ更新
+
+        if (diff > threshold || prec_MaxHeight === 0) {
+          // 重要: 遅延して更新することで無限ループを防止
+          setTimeout(() => {
+            setPrec_MaxHeight(newMaxHeight);
+          }, 0);
+        }
+
+        // スケールの更新は直接行う（これは毎回更新して問題ない）
+        setTrajectoryScale(finalScale);
         setRocketScale(baseRocketScale * powerFactor);
 
-        console.log(`計算完了: 高度=${preFlight.prec_MaxHeight.toFixed(1)}m, スケール=${finalScale.toFixed(2)}`);
-        return true;
+        if (!isPreLaunched) {
+          setIsPreLaunched(true);
+        }
+
+
+        // 非同期で状態更新を行う
+        setTimeout(updateStates, 0);
+
+        console.log(`事前計算完了: 高度=${newMaxHeight.toFixed(1)}m, スケール=${finalScale.toFixed(2)}`);
+        return results;
       }
     } catch (error) {
-      console.error('飛行経路計算エラー:', error);
+      console.error('事前飛行経路計算エラー:', error);
     }
 
+
+
+
+
+
+
+
+
+
     // 失敗した場合はデフォルト値を設定
-    setMaxHeight(0);
-
-    // デフォルトスケールを設定
     const defaultScale = getInitialScaleForMotor(selectedMotor);
-    setTrajectoryScale(defaultScale);
 
-    // シミュレーションタブ描画にかかる事前計算をOn
-    setIsPreLaunched(true);
+    // 非同期で状態更新を行う
+    setTimeout(() => {
+      setTrajectoryScale(defaultScale);
+      setRocketScale(0.03 * getMotorPowerFactor(selectedMotor));
+
+      if (!isPreLaunched) {
+        setIsPreLaunched(true);
+      }
+    }, 0);
 
     return false;
   }, [
-    simulationParams, launchAngle, windSpeed, windProfile,
+    preSimParams, launchAngle, windSpeed, windProfile,
     enhancedAttitudeControl, windAngleLimitation,
-    isPreLaunched, animationId, selectedMotor
+    isLaunched, animationId, selectedMotor
+    // prec_MaxHeightとisPreLaunchedを依存配列から除外
   ]);
+
+
+  // この関数を usePreFlightRocketSim フック内に追加
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    // パラメータが変更されたら自動的に計算を実行
+    console.log('パラメータが変更されました: prec_MaxHeightの先行計算を実行します');
+
+    try {
+      // 非同期で計算を実行して UI をブロックしない
+      const timer = setTimeout(() => {
+        const preFlight = calculateFlightPath(
+          preSimParams,
+          launchAngle,
+          windSpeed,
+          windProfile,
+          {
+            ...SVG_CONFIG,
+            enhancedAttitudeControl,
+            windAngleLimitation
+          }
+        );
+
+        if (preFlight && preFlight.prec_MaxHeight > 0) {
+          const newMaxHeight = preFlight.prec_MaxHeight;
+          // 変更が閾値を超える場合のみ更新
+          const diff = Math.abs(newMaxHeight - prec_MaxHeight);
+          const threshold = 0.5;
+
+          if (diff > threshold || prec_MaxHeight === 0) {
+            console.log(`先行計算: prec_MaxHeightを更新: ${prec_MaxHeight} -> ${newMaxHeight}m`);
+            setPrec_MaxHeight(newMaxHeight);
+          } else {
+            console.log(`prec_MaxHeightの変更が小さいため更新をスキップ: ${diff.toFixed(2)}m`);
+          }
+        }
+      }, 100); // UI更新を優先するため少し遅延させる
+
+      return () => clearTimeout(timer);
+    } catch (error) {
+      console.warn("prec_MaxHeight先行計算に失敗しました", error);
+    }
+  }, [
+    isInitialized,
+    preSimParams,
+    launchAngle,
+    windSpeed,
+    windProfile,
+    enhancedAttitudeControl,
+    windAngleLimitation
+    // prec_MaxHeightは依存配列から除外して無限ループを防止
+  ]);
+
+
+
+
+
+
+
+
+
+
+
+
 
   // リセット関数を強化
   const handleReset = useCallback(() => {
@@ -405,7 +522,7 @@ export const usePreFlightRocketSim = () => {
     // 現在の結果を前回の結果として保存
     if (preFlightResults) {
       setLastFlightResults(preFlightResults);
-      setFlightResults(null);
+      setPreFlightResults(null);
     }
 
     // ポップアップを閉じる
@@ -413,7 +530,7 @@ export const usePreFlightRocketSim = () => {
 
     // すべての状態をリセット
     setIsLaunched(false);
-    setFlightData([]);
+    setPreFlightData([]);
     setCurrentTime(0);
     setCurrentHeight(0);
     setCurrentSpeed(0);
@@ -446,7 +563,7 @@ export const usePreFlightRocketSim = () => {
       // 風速プロファイルを引数として渡す
       const preFlight = calculateFlightPathWithLanding(
         calculateFlightPath,
-        simulationParams,
+        preSimParams,
         launchAngle,
         windSpeed,
         windProfile,
@@ -687,20 +804,37 @@ export const usePreFlightRocketSim = () => {
       console.error('Launch error:', error);
       handleReset();
     }
-  }, [isLaunched, launchAngle, windSpeed, windProfile, simulationParams, handleReset, finHeight, trajectoryScale]);
+  }, [isLaunched, launchAngle, windSpeed, windProfile, preSimParams, handleReset, finHeight, trajectoryScale]);
 
 
   // 本フックから公開する関数とパラメータ
   return {
-    
+
 
     // シミュレーション状態
     isLaunched, setIsLaunched,
-    preFlightData, 
+    preFlightData,
     currentTime,
     currentHeight, currentSpeed, currentDistance, currentFinDeflection,
     currentMaxHeight, currentMaxSpeed, currentMaxDistance, currentMaxFinDeflection,
     completedFlights, keyPoints,
+
+    // Setterの一覧
+    noseShape, setNoseShape,
+    noseHeight, setNoseHeight,
+    bodyHeight, setBodyHeight,
+    bodyWidth, setBodyWidth,
+    finHeight, setFinHeight,
+    finBaseWidth, setFinBaseWidth,
+    finTipWidth, setFinTipWidth,
+    finThickness, setFinThickness,
+    finSweepLength, setFinSweepLength,
+    finMaterial, setFinMaterial,
+    finCount, setFinCount,
+    weight, setWeight,
+    centerOfGravity, setCenterOfGravity,
+    selectedMotor, setSelectedMotor,
+    selectedParachute, setSelectedParachute,
 
     preCalculateFlightPath, // RocketSimulator.jsxの中のIntegretedRocketSimulator関数内で使用
     prec_MaxHeight, // prec_MaxHeightも外部に公開
@@ -738,6 +872,6 @@ export const usePreFlightRocketSim = () => {
     handleLaunch,
     handleReset,
 
-    
+
   };
 };

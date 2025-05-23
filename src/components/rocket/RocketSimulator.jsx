@@ -73,7 +73,7 @@ const useRocketSimulator = () => {
   const [finSweepLength, setFinSweepLength] = useState(95); // 95mmに変更
   const [finMaterial, setFinMaterial] = useState("light_veneer");
   // フィン枚数状態を追加
-  const [finCount, setFinCount] = useState(3); // デフォルトは4枚
+  const [finCount, setFinCount] = useState(3); // デフォルトは3枚
 
   // Analysis parameters - weight変数の宣言を初期化前の参照より前に移動
   const [weight, setWeight] = useState(50);
@@ -156,30 +156,6 @@ const useRocketSimulator = () => {
   // 着地予測関連の状態変数を追加
   const [landing, setLanding] = useState(null);
   const [showLandingPrediction, setShowLandingPrediction] = useState(true);
-
-  // 物理計算のための全パラメータをまとめる
-  const simulationParams = useMemo(() => ({
-    noseShape,
-    noseHeight,
-    bodyHeight,
-    bodyWidth,
-    finHeight,
-    finBaseWidth,
-    finTipWidth,
-    finThickness,
-    finSweepLength,
-    finMaterial,
-    weight,
-    centerOfGravity,
-    selectedMotor,
-    selectedParachute,
-    finCount // finCountパラメータを追加
-  }), [
-    noseShape, noseHeight, bodyHeight, bodyWidth,
-    finHeight, finBaseWidth, finTipWidth, finThickness, finSweepLength,
-    finMaterial, weight, centerOfGravity, selectedMotor, selectedParachute,
-    finCount // 依存配列にもfinCountを追加
-  ]);
 
   // useRocketSimulator内で、noseShapeの状態変更を正しく伝播するように修正
   const setNoseShapeAndUpdate = (shape) => {
@@ -374,47 +350,6 @@ const useRocketSimulator = () => {
     );
   }, [analysis, noseHeight, bodyHeight, finHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth]);
 
-  // 初期化後の計算値の更新
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    // 投影面積、体積、圧力中心位置、空力中心位置を計算
-    const areas = calculateProjectedArea(simulationParams);
-    const volumeData = calculateVolume(simulationParams);
-    const cpData = calculateCenterOfPressure(simulationParams);
-    const acData = calculateAerodynamicCenter(simulationParams);
-    const stabilityCpData = calculateStabilityCenterOfPressure(simulationParams);
-    const margins = calculateStaticMargin(simulationParams);
-
-    // 状態を更新
-    setProjectedAreas(areas);
-    setVolumes(volumeData);
-    setPressureCenter(cpData);
-    setAerodynamicCenter(acData);
-    setStabilityCenterOfPressure(stabilityCpData);
-    setStaticMargins(margins);
-
-  }, [isInitialized, simulationParams]);
-
-  // 動的に計算結果を更新する
-  useEffect(() => {
-    // 投影面積、体積、圧力中心位置、空力中心位置を計算
-    const areas = calculateProjectedArea(simulationParams);
-    const volumeData = calculateVolume(simulationParams);
-    const cpData = calculateCenterOfPressure(simulationParams);
-    const acData = calculateAerodynamicCenter(simulationParams);
-    const stabilityCpData = calculateStabilityCenterOfPressure(simulationParams);
-    const margins = calculateStaticMargin(simulationParams);
-
-    // 状態を更新
-    setProjectedAreas(areas);
-    setVolumes(volumeData);
-    setPressureCenter(cpData);
-    setAerodynamicCenter(acData);
-    setStabilityCenterOfPressure(stabilityCpData);
-    setStaticMargins(margins);
-
-  }, [simulationParams]);
 
   // 計算結果のキャッシュ
   const calculations = useMemo(() => {
@@ -436,12 +371,14 @@ const useRocketSimulator = () => {
 
     // 新しい計算関数を使用してフィン限界速度を計算
     const rocketParams = {
-      noseHeight, bodyHeight, bodyWidth, finHeight, finBaseWidth, finTipWidth,
-      finThickness, finSweepLength, finMaterial, centerOfGravity, weight
+      noseShape, noseHeight, bodyHeight, bodyWidth, finHeight, finBaseWidth, finTipWidth,
+      finThickness, finSweepLength, finCount, finMaterial, centerOfGravity, weight
     };
 
     const finDivergenceSpeed = calculateFinDivergenceSpeed(rocketParams);
     const finFlutterSpeed = calculateFinFlutterSpeed(rocketParams);
+
+
 
     return {
       totalHeight: totalHeight,
@@ -456,11 +393,88 @@ const useRocketSimulator = () => {
       finFlutterSpeed: Math.round(finFlutterSpeed),
       // フォーマット済みの値を追加
       finDivergenceSpeedDisplay: formatSpeedValue(finDivergenceSpeed),
-      finFlutterSpeedDisplay: formatSpeedValue(finFlutterSpeed)
+      finFlutterSpeedDisplay: formatSpeedValue(finFlutterSpeed),
+      rocketParams
     };
   }, [noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth, centerOfGravity,
     pressureCenter, aerodynamicCenter, stabilityCenterOfPressure, staticMargins,
     finHeight, finThickness, finMaterial, weight]);
+
+
+  console.log(calculations.rocketParams);
+
+  // 物理計算のための全パラメータをまとめる
+  const simulationParams = useMemo(() => ({
+    ...calculations.rocketParams,
+    selectedMotor,
+    selectedParachute,
+    launchAngle,
+    windSpeed,
+    windProfile
+  }), [
+    calculations.rocketParams,
+    selectedMotor,
+    selectedParachute,
+    launchAngle,
+    windSpeed,
+    windProfile
+  ]);
+
+  // 初期化後の計算値の更新
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const areas = calculateProjectedArea(calculations.rocketParams);
+    const volumeData = calculateVolume(calculations.rocketParams);
+    const cpData = calculateCenterOfPressure(calculations.rocketParams);
+    const acData = calculateAerodynamicCenter(calculations.rocketParams);
+    const stabilityCpData = calculateStabilityCenterOfPressure(calculations.rocketParams);
+    const margins = calculateStaticMargin(calculations.rocketParams);
+
+    setProjectedAreas(areas);
+    setVolumes(volumeData);
+    setPressureCenter(cpData);
+    setAerodynamicCenter(acData);
+    setStabilityCenterOfPressure(stabilityCpData);
+    setStaticMargins(margins);
+
+  }, [
+    isInitialized,
+    calculations.rocketParams.noseShape,
+    calculations.rocketParams.noseHeight,
+    calculations.rocketParams.bodyHeight,
+    calculations.rocketParams.bodyWidth,
+    calculations.rocketParams.finHeight,
+    calculations.rocketParams.finBaseWidth,
+    calculations.rocketParams.finTipWidth,
+    calculations.rocketParams.finThickness,
+    calculations.rocketParams.finSweepLength,
+    calculations.rocketParams.finMaterial,
+    calculations.rocketParams.finCount,
+    calculations.rocketParams.centerOfGravity,
+    calculations.rocketParams.weight
+  ]);
+
+  // 動的に計算結果を更新する
+  useEffect(() => {
+    // 投影面積、体積、圧力中心位置、空力中心位置を計算
+    const areas = calculateProjectedArea(simulationParams);
+    const volumeData = calculateVolume(simulationParams);
+    const cpData = calculateCenterOfPressure(simulationParams);
+    const acData = calculateAerodynamicCenter(simulationParams);
+    const stabilityCpData = calculateStabilityCenterOfPressure(simulationParams);
+    const margins = calculateStaticMargin(simulationParams);
+
+    // 状態を更新
+    setProjectedAreas(areas);
+    setVolumes(volumeData);
+    setPressureCenter(cpData);
+    setAerodynamicCenter(acData);
+    setStabilityCenterOfPressure(stabilityCpData);
+    setStaticMargins(margins);
+
+  }, [simulationParams]);
+
 
   // 現在の飛行フェーズを取得する関数
   const getCurrentFlightPhase = useCallback(() => {
@@ -599,101 +613,7 @@ const useRocketSimulator = () => {
     return powerFactors[motorType] || 0.5; // デフォルト値も調整
   };
 
-  const recalculateFlightPath = useCallback(() => {
-    console.log('飛行経路を再計算します');
-
-    try {
-      // 現在進行中のアニメーションがあれば中止する
-      if (isLaunched && animationId) {
-        cancelAnimationFrame(animationId);
-        setAnimationId(null);
-        setIsLaunched(false);
-      }
-
-      // 風速プロファイルを引数として渡す
-      const preFlight = calculateFlightPath(
-        simulationParams,
-        launchAngle,
-        windSpeed,
-        windProfile,
-        {
-          ...SVG_CONFIG,
-          enhancedAttitudeControl,
-          windAngleLimitation
-        }
-      );
-
-      if (preFlight && preFlight.prec_MaxHeight > 0) {
-        // 最大高度を保存 - この行が重要
-        //console.log(`最大高度を更新: ${preFlight.prec_MaxHeight}m`);
-        //setPrec_MaxHeight(preFlight.prec_MaxHeight);
-
-        const availableHeight = SVG_CONFIG.height - SVG_CONFIG.groundLevel;
-
-        // 改良：より高いベース高さを設定
-        const baseHeights = {
-          '1/2A6-2': 100,
-          'A8-3': 150,
-          'B6-4': 200
-        };
-
-        const expectedBaseHeight = baseHeights[simulationParams.selectedMotor] || 150;
-        const targetHeight = Math.max(preFlight.maxHeight * 1.3, expectedBaseHeight);
-
-        const minHorizontalDistance = expectedBaseHeight * 0.9;
-        const maxDistance = Math.max(preFlight.maxDistance || 0, minHorizontalDistance);
-
-        // スケール計算
-        const verticalScale = availableHeight / targetHeight;
-        const horizontalScale = (SVG_CONFIG.width * 0.9) / (maxDistance * 2 || 1);
-
-        const motorPowerFactor = {
-          '1/2A6-2': 0.45,
-          'A8-3': 0.35,
-          'B6-4': 0.25
-        };
-
-        const powerFactor = motorPowerFactor[simulationParams.selectedMotor] || 0.35;
-
-        // 最小/最大スケール値の調整
-        const minScale = 10;
-        const maxScale = 24;
-
-        const rawScale = Math.min(verticalScale, horizontalScale) * powerFactor;
-        // 最終スケールを調整 - 必ず最小スケールを適用
-        const finalScale = Math.max(minScale, Math.min(maxScale, rawScale));
-
-        // スケール設定
-        setTrajectoryScale(finalScale);
-
-        // ロケットスケールをさらに小さく
-        const baseRocketScale = 0.03;
-        setRocketScale(baseRocketScale * powerFactor);
-
-        console.log(`計算完了: 高度=${preFlight.prec_MaxHeight.toFixed(1)}m, スケール=${finalScale.toFixed(2)}`);
-        return true;
-      }
-    } catch (error) {
-      console.error('飛行経路計算エラー:', error);
-    }
-
-    // 失敗した場合はデフォルト値を設定
-    setMaxHeight(0);
-
-    // デフォルトスケールを設定
-    const defaultScale = getInitialScaleForMotor(selectedMotor);
-    setTrajectoryScale(defaultScale);
-
-    // シミュレーションタブ描画にかかる事前計算をOn
-    setIsPreLaunched(true);
-
-    return false;
-  }, [
-    simulationParams, launchAngle, windSpeed, windProfile,
-    enhancedAttitudeControl, windAngleLimitation,
-    isPreLaunched, animationId, selectedMotor
-  ]);
-
+  
   // リセット関数を強化
   const handleReset = useCallback(() => {
     console.log('リセット処理開始');
@@ -1095,6 +1015,8 @@ const useRocketSimulator = () => {
     };
   }, [animationId]);
 
+  
+
   // 本フックから公開する関数とパラメータ
   return {
     // デザインパラメータ
@@ -1129,8 +1051,8 @@ const useRocketSimulator = () => {
     currentMaxHeight, currentMaxSpeed, currentMaxDistance, currentMaxFinDeflection,
     completedFlights, keyPoints,
 
-    recalculateFlightPath,
-    //prec_MaxHeight, // maxHeightも外部に公開
+    //recalculateFlightPath,
+    prec_MaxHeight, setPrec_MaxHeight,// maxHeightも外部に公開
 
     // 表示設定
     design, analysis,
@@ -1141,6 +1063,10 @@ const useRocketSimulator = () => {
 
     // 計算結果
     calculations,
+
+    // パラメータに外部からアクセスできるようにする
+    rocketParams: calculations.rocketParams, // ←必ずここに含める
+    simulationParams, // ←rocketParamsを元に生成する
 
     // 初期化状態
     isInitialized,
@@ -1213,27 +1139,45 @@ const useRocketSimulator = () => {
 const IntegratedRocketSimulator = () => {
   const [activeTab, setActiveTab] = useState(UI_CONFIG.defaultTab);
   const [debugView, setDebugView] = useState(false);
-  // 開発モードのステートを定数から初期化し、キーボードショートカットでの切り替えを無効化
   const [devMode, setDevMode] = useState(ENABLE_DEV_MODE);
-
+  
+  // 先行計算のフラグを追加
+  const calculationCompleteRef = useRef(false);
+  
   // ロケットシミュレーターフックを使用
   const rocketSim = useRocketSimulator();
-
   const preRocketSim = usePreFlightRocketSim();
 
   // タブ切り替え処理関数
   const handleTabChange = useCallback((newTab) => {
     console.log(`タブ切り替え処理: ${activeTab} -> ${newTab}`);
 
-    // シミュレーションタブに切り替える場合は計算を実行
-    if (newTab === 'simulation' && preRocketSim.preCalculateFlightPath) {
-      console.log('シミュレーション用の計算を実行します');
-      preRocketSim.preCalculateFlightPath();
+    // シミュレーションタブに切り替える場合、既存の計算結果を使用
+    if (newTab === 'simulation' && activeTab !== 'simulation' && preRocketSim.isInitialized) {
+      console.log('シミュレーションタブに切り替わりました: 既存のprec_MaxHeightを使用します');
+      
+      // ViewBoxの構築のみを行い、計算は行わない
+      // 計算済みのフラグを設定
+      calculationCompleteRef.current = true;
     }
 
     // タブを更新
     setActiveTab(newTab);
-  }, [activeTab, preRocketSim]);
+  }, [activeTab, preRocketSim.isInitialized]);
+
+  // コンポーネントの初期マウント時にViewBoxの初期設定
+  useEffect(() => {
+    if (activeTab === 'simulation' && preRocketSim.isInitialized && !calculationCompleteRef.current) {
+      // 初期設定のみ行い、計算は行わない
+      console.log('シミュレーションタブ初期表示: ViewBoxの初期設定を行います');
+      
+      // 既存のprec_MaxHeightを使用
+      console.log(`既存のprec_MaxHeight: ${preRocketSim.prec_MaxHeight}m`);
+      
+      // 計算済みフラグを設定
+      calculationCompleteRef.current = true;
+    }
+  }, [activeTab, preRocketSim.isInitialized]);
 
   // 開発モードが有効な場合のみコンソールにログを出力（オプション）←←←←←←←←こいつを外すととりあえず発射できる！！！！！
   //useEffect(() => {
