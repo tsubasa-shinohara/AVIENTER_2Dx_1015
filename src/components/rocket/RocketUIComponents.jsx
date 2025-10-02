@@ -1069,20 +1069,27 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
   const windArrow = rocketSim.getWindArrow(rocketSim.windSpeed);
 
   // 飛翔軌跡を描くエリアの高さをuseMemoでメモ化
-  const { viewHeight, trajectoryDisplayHeight } = useMemo(() => {
-    // nullまたは不正な値のチェック
+  const { viewHeight, trajectoryDisplayHeight, viewBoxMinY } = useMemo(() => {
     const maxHeightValue = preRocketSim.prec_MaxHeight > 0 ? preRocketSim.prec_MaxHeight : 100;
-    const calculatedViewHeight = maxHeightValue * 1.1 + SVG_CONFIG.groundLevel;
-    const groundHeight = 50;
-    const displayHeight = calculatedViewHeight * 1.1 + groundHeight + 100;
+    const scale = preRocketSim.trajectoryScale || 10;
+    
+    const maxHeightSvg = maxHeightValue * scale * 1.1;
+    const highestY = SVG_CONFIG.groundLevel - maxHeightSvg;
+    
+    const groundPadding = 50;
+    const minY = Math.min(0, highestY);
+    const viewBoxHeight = SVG_CONFIG.groundLevel + groundPadding - minY;
+    
+    const displayHeight = viewBoxHeight + 100;
 
-    console.log("ViewBox計算: 高さ=", calculatedViewHeight, "prec_MaxHeight=", maxHeightValue);
+    console.log("ViewBox計算: minY=", minY, "height=", viewBoxHeight, "prec_MaxHeight=", maxHeightValue, "scale=", scale);
 
     return {
-      viewHeight: calculatedViewHeight,
-      trajectoryDisplayHeight: displayHeight
+      viewHeight: viewBoxHeight,
+      trajectoryDisplayHeight: displayHeight,
+      viewBoxMinY: minY
     };
-  }, [preRocketSim.prec_MaxHeight]); // 依存配列にprec_MaxHeightのみを含める
+  }, [preRocketSim.prec_MaxHeight, preRocketSim.trajectoryScale]);
 
   // 姿勢表示用のロケットスケール計算の改良
   const calculateAttitudeDisplayScale = (rocketParams, circleRadius = 90) => {
@@ -1687,7 +1694,7 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
             <svg
               width="100%"
               height={trajectoryDisplayHeight}
-              viewBox={`0 0 ${SVG_CONFIG.width} ${viewHeight}`}
+              viewBox={`0 ${viewBoxMinY} ${SVG_CONFIG.width} ${viewHeight}`}
               preserveAspectRatio="xMidYMax meet"
               style={{
                 background: 'white',
@@ -1701,7 +1708,7 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
                   const heightMeters = i * 10; // 10mごとに線を引く
                   const y = rocketSim.metersToSvgY(heightMeters);
 
-                  if (y >= 0 && y <= preRocketSim.prec_MaxHeight * 100) {
+                  if (y >= viewBoxMinY && y <= SVG_CONFIG.groundLevel + 50) {
                     return (
                       <g key={`grid-h-${i}`}>
                         <line
