@@ -642,6 +642,10 @@ const calculateLiftMoment = (velocity, omega, flightAngle, rocketParams, sideAre
     finalMoment = -momentMagnitude; //マイナスに改造中0402（時計回りをプラス）
   }
 
+  if (!isFinite(finalMoment) || isNaN(finalMoment)) {
+    return 0;
+  }
+
   return finalMoment;
 };
 
@@ -667,6 +671,10 @@ const calculateDragMoment = (velocity, omega, flightAngle, rocketParams, bodyDia
     finalMoment = momentMagnitude; //プラスに改造中0402（時計回りをプラス）
   } else {
     finalMoment = -momentMagnitude;  //マイナスに改造中0402（時計回りをプラス）
+  }
+
+  if (!isFinite(finalMoment) || isNaN(finalMoment)) {
+    return 0;
   }
 
   return finalMoment;
@@ -1098,8 +1106,15 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       Fy -= mass_kg * g;
 
       // 加速度計算
-      ax = Fx / mass_kg;
-      ay = Fy / mass_kg;
+      const MIN_MASS = 1e-6;
+      if (Math.abs(mass_kg) < MIN_MASS) {
+        console.warn(`mass_kg too small: ${mass_kg}, setting accelerations to 0`);
+        ax = 0;
+        ay = -g;
+      } else {
+        ax = Fx / mass_kg;
+        ay = Fy / mass_kg;
+      }
 
       // トルク計算 - パラシュート展開後は発射角度を維持する
       const initialOmega = angle * Math.PI / 180;
@@ -1127,8 +1142,15 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       Fx += Dw * 0.5;
 
       // 加速度計算
-      ax = Fx / mass_kg;
-      ay = Fy / mass_kg;
+      const MIN_MASS = 1e-6;
+      if (Math.abs(mass_kg) < MIN_MASS) {
+        console.warn(`mass_kg too small: ${mass_kg}, setting accelerations to 0`);
+        ax = 0;
+        ay = -g;
+      } else {
+        ax = Fx / mass_kg;
+        ay = Fy / mass_kg;
+      }
 
       // トルク計算 - パラシュート展開中も発射角度に強く引っ張られる
       const initialOmega = angle * Math.PI / 180;
@@ -1211,19 +1233,15 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
                 MF = calculateFinMoment(rocketParams.finHeight, rocketParams.finBaseWidth, rocketParams.finCount, velocity, flightAngle, rocketParams, rocketParams.finCp, rocketParams.centerOfGravity);
               }
 
-              // トルク値の検証 - 無限大や非数値をチェック
-              if (!isFinite(ML) || isNaN(ML)) torque += 0;
-              else if (!isFinite(MD) || isNaN(MD)) torque += 0;
-              else if (!isFinite(MW) || isNaN(MW)) torque += 0;
-              else if (!isFinite(MF) || isNaN(MF)) torque += 0;
-              else {
-                // 合計トルク - 上限設定を追加
+              if (!isFinite(ML) || isNaN(ML) || !isFinite(MD) || isNaN(MD) || 
+                  !isFinite(MW) || isNaN(MW) || !isFinite(MF) || isNaN(MF)) {
+                torque = 0;
+                console.warn(`Invalid moment detected at t=${time.toFixed(2)}s: ML=${ML}, MD=${MD}, MW=${MW}, MF=${MF}`);
+              } else {
                 const rawTorque = ML + MD + MW + MF;
 
-                // 通常のトルク制限
                 torque = Math.max(-1.0, Math.min(1.0, rawTorque));
 
-                // デバッグ用ログ
                 if (Math.abs(torque) > 0.001 || Math.abs(ML) > 0.001 || Math.abs(MD) > 0.001 || Math.abs(MW) > 0.001 || Math.abs(MF) > 0.001) {
                   console.log(`Thrust Torque components (t=${time.toFixed(2)}): ML=${ML.toFixed(6)}, MD=${MD.toFixed(6)}, MW=${MW.toFixed(6)}, MF=${MF.toFixed(6)}, Total=${torque.toFixed(6)}`);
                 }
@@ -1277,11 +1295,15 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
               MF = calculateFinMoment(rocketParams.finHeight, rocketParams.finBaseWidth, rocketParams.finCount, velocity, flightAngle, rocketParams, rocketParams.finCp, rocketParams.centerOfGravity);
             }
 
-            // 合計トルク
-            const rawTorque = ML + MD + MW + MF;
+            if (!isFinite(ML) || isNaN(ML) || !isFinite(MD) || isNaN(MD) || 
+                !isFinite(MW) || isNaN(MW) || !isFinite(MF) || isNaN(MF)) {
+              torque = 0;
+              console.warn(`Invalid moment detected in inertial flight at t=${time.toFixed(2)}s: ML=${ML}, MD=${MD}, MW=${MW}, MF=${MF}`);
+            } else {
+              const rawTorque = ML + MD + MW + MF;
 
-            // 通常のトルク制限
-            torque = Math.max(-1.0, Math.min(1.0, rawTorque));
+              torque = Math.max(-1.0, Math.min(1.0, rawTorque));
+            }
 
             // デバッグ用ログ
             if (Math.abs(torque) > 0.001 || Math.abs(ML) > 0.001 || Math.abs(MD) > 0.001 || Math.abs(MW) > 0.001 || Math.abs(MF) > 0.001) {
@@ -1300,8 +1322,15 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       }
 
       // 加速度計算
-      ax = Fx / mass_kg;
-      ay = Fy / mass_kg;
+      const MIN_MASS = 1e-6;
+      if (Math.abs(mass_kg) < MIN_MASS) {
+        console.warn(`mass_kg too small: ${mass_kg}, setting accelerations to 0`);
+        ax = 0;
+        ay = -g;
+      } else {
+        ax = Fx / mass_kg;
+        ay = Fy / mass_kg;
+      }
     }
 
     // トルクの累積
@@ -1325,8 +1354,13 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
           console.log(`Torque calculation (t=${time.toFixed(2)}): avgTorque=${safeAvgTorque.toFixed(6)}, effectiveTorque=${effectiveTorque.toFixed(6)}, momentOfInertia=${momentOfInertia.toFixed(6)}`);
         }
 
-        // 角加速度の計算: α = M/I
-        angularAcceleration = effectiveTorque / momentOfInertia;
+        const MIN_MOMENT_OF_INERTIA = 1e-6;
+        if (Math.abs(momentOfInertia) < MIN_MOMENT_OF_INERTIA) {
+          console.warn(`momentOfInertia too small: ${momentOfInertia}, setting angularAcceleration to 0`);
+          angularAcceleration = 0;
+        } else {
+          angularAcceleration = effectiveTorque / momentOfInertia;
+        }
 
         // 角速度の更新: ω = ω0 + α*dt2
         const oldAngularVelocity = angularVelocity;
