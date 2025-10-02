@@ -1070,8 +1070,18 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
 
   // 飛翔軌跡を描くエリアの高さをuseMemoでメモ化
   const { viewHeight, trajectoryDisplayHeight, viewBoxMinY } = useMemo(() => {
-    const maxHeightValue = preRocketSim.prec_MaxHeight > 0 ? preRocketSim.prec_MaxHeight : 100;
-    const scale = preRocketSim.trajectoryScale || 10;
+    let maxHeightValue = rocketSim.currentMaxHeight || 0;
+    
+    if (rocketSim.completedFlights && rocketSim.completedFlights.length > 0) {
+      const completedMaxHeights = rocketSim.completedFlights.map(f => f.maxHeight || 0);
+      maxHeightValue = Math.max(maxHeightValue, ...completedMaxHeights);
+    }
+    
+    if (maxHeightValue === 0) {
+      maxHeightValue = 100;
+    }
+    
+    const scale = rocketSim.trajectoryScale || 10;
     
     const maxHeightSvg = maxHeightValue * scale * 1.1;
     const highestY = SVG_CONFIG.groundLevel - maxHeightSvg;
@@ -1082,14 +1092,14 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
     
     const displayHeight = viewBoxHeight + 100;
 
-    console.log("ViewBox計算: minY=", minY, "height=", viewBoxHeight, "prec_MaxHeight=", maxHeightValue, "scale=", scale);
+    console.log("ViewBox計算: minY=", minY, "height=", viewBoxHeight, "currentMaxHeight=", rocketSim.currentMaxHeight, "maxHeightValue=", maxHeightValue, "scale=", scale);
 
     return {
       viewHeight: viewBoxHeight,
       trajectoryDisplayHeight: displayHeight,
       viewBoxMinY: minY
     };
-  }, [preRocketSim.prec_MaxHeight, preRocketSim.trajectoryScale]);
+  }, [rocketSim.currentMaxHeight, rocketSim.trajectoryScale, rocketSim.completedFlights]);
 
   // 姿勢表示用のロケットスケール計算の改良
   const calculateAttitudeDisplayScale = (rocketParams, circleRadius = 90) => {
