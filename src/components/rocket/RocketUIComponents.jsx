@@ -1714,30 +1714,36 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
               {/* グリッド線 - 常に表示するよう変更 */}
               <>
                 {/* 横線 - 高度メモリ */}
-                {Array.from({ length: 10 }).map((_, i) => {
-                  const heightMeters = i * 10; // 10mごとに線を引く
-                  const y = rocketSim.metersToSvgY(heightMeters);
+                {(() => {
+                  const gridSpacing = 10;
+                  const maxHeightForGrid = Math.ceil((SVG_CONFIG.groundLevel - viewBoxMinY) / rocketSim.trajectoryScale / gridSpacing) * gridSpacing;
+                  const numGridLines = Math.ceil(maxHeightForGrid / gridSpacing);
+                  
+                  return Array.from({ length: numGridLines }).map((_, i) => {
+                    const heightMeters = i * gridSpacing;
+                    const y = rocketSim.metersToSvgY(heightMeters);
 
-                  if (y >= viewBoxMinY && y <= SVG_CONFIG.groundLevel + 50) {
-                    return (
-                      <g key={`grid-h-${i}`}>
-                        <line
-                          x1={0}
-                          y1={y}
-                          x2={800}
-                          y2={y}
-                          stroke="#ddd"
-                          strokeWidth="1"
-                          strokeDasharray="5,5"
-                        />
-                        <text x={5} y={y - 5} fontSize="12" fill="#666">
-                          {heightMeters}m
-                        </text>
-                      </g>
-                    );
-                  }
-                  return null;
-                })}
+                    if (y >= viewBoxMinY && y <= SVG_CONFIG.groundLevel + 50) {
+                      return (
+                        <g key={`grid-h-${i}`}>
+                          <line
+                            x1={0}
+                            y1={y}
+                            x2={800}
+                            y2={y}
+                            stroke="#ddd"
+                            strokeWidth="1"
+                            strokeDasharray="5,5"
+                          />
+                          <text x={5} y={y - 5} fontSize="12" fill="#666">
+                            {heightMeters}m
+                          </text>
+                        </g>
+                      );
+                    }
+                    return null;
+                  });
+                })()}
 
                 {/* 縦線 - 水平距離メモリ */}
                 {Array.from({ length: 11 }).map((_, i) => {

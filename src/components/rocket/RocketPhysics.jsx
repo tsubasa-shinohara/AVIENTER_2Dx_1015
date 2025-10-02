@@ -1092,7 +1092,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       const Cdw = 0.25; // 横風の抗力係数
       const S = parachuteDiameter * parachuteDiameter * 0.785; // パラシュートの投影面積
       const Dw = 0.5 * Cdw * rho * Math.abs(effectiveWindSpeed) * effectiveWindSpeed * S;
-      Fx -= Dw; // 横風の影響を追加
+      Fx += Dw;
 
       // 重力の追加
       Fy -= mass_kg * g;
@@ -1124,7 +1124,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       const Cdw = 0.25; // 横風の抗力係数
       const S = bodyDiameter * bodyLength * 0.5; // 半分展開時の面積
       const Dw = 0.5 * Cdw * rho * Math.abs(effectiveWindSpeed) * effectiveWindSpeed * S;
-      Fx -= Dw * 0.5; // 展開中なので横風の影響を半分に
+      Fx += Dw * 0.5;
 
       // 加速度計算
       ax = Fx / mass_kg;
@@ -1166,11 +1166,11 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
           if (angle === 0) {
             // 垂直発射
             Fy = thrust - mass_kg * g;
-            Fx = -Dw; // 横風の影響のみ
+            Fx = Dw;
           } else {
             // 角度付き発射 (修正した式)
             Fy = thrust * Math.cos(adjustedOmega) - mass_kg * g;
-            Fx = thrust * Math.sin(adjustedOmega) - Dw; // 横風の影響を追加
+            Fx = thrust * Math.sin(adjustedOmega) + Dw;
           }
 
           // 発射台上は角度固定
@@ -1179,12 +1179,12 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
           // 自由飛行（推力あり）
           if (velocity > 0.001) {
             // 修正: 推力と抗力の分解方法を修正
-            // T*sinθ - Dt*sinθ - Dw, T*cosθ - m*g - Dt*cosθ
-            Fx = thrust * Math.sin(adjustedOmega) - Dt * Math.sin(adjustedOmega) - Dw;
+            // T*sinθ - Dt*sinθ + Dw, T*cosθ - m*g - Dt*cosθ
+            Fx = thrust * Math.sin(adjustedOmega) - Dt * Math.sin(adjustedOmega) + Dw;
             Fy = thrust * Math.cos(adjustedOmega) - mass_kg * g - Dt * Math.cos(adjustedOmega);
           } else {
             // 速度がほぼゼロの場合
-            Fx = thrust * Math.sin(adjustedOmega) - Dw;
+            Fx = thrust * Math.sin(adjustedOmega) + Dw;
             Fy = thrust * Math.cos(adjustedOmega) - mass_kg * g;
           }
 
@@ -1245,11 +1245,11 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
         // 慣性飛行（推力なし）- ここでは推力T=0
 
         if (velocity > 0.001) {
-          // 修正: Fx = -Dt*sinθ - Dw, Fy = -m*g - Dt*cosθ
-          Fx = -Dt * Math.sin(adjustedOmega) - Dw;
+          // 修正: Fx = -Dt*sinθ + Dw, Fy = -m*g - Dt*cosθ
+          Fx = -Dt * Math.sin(adjustedOmega) + Dw;
           Fy = -mass_kg * g - Dt * Math.cos(adjustedOmega);
         } else {
-          Fx = -Dw;
+          Fx = Dw;
           Fy = -mass_kg * g;
         }
 
