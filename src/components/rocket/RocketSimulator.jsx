@@ -136,7 +136,6 @@ const useRocketSimulator = () => {
   const [keyPoints, setKeyPoints] = useState({});
 
   // useRocketSimulator 内で、他の状態変数と一緒に追加
-  const [maxHeight, setMaxHeight] = useState(0);
   const [prec_MaxHeight, setPrec_MaxHeight] = useState(0);
   const [isPreLaunched, setIsPreLaunched] = useState(false);
 
@@ -724,15 +723,10 @@ const useRocketSimulator = () => {
         return; // 早期リターンでこれ以上の処理を行わない
       }
 
-      // 事前計算に最大高度を保存 - これが重要2
+      // 事前計算に最大高度を保存
       if (flight && flight.prec_MaxHeight > 0) {
         setPrec_MaxHeight(flight.prec_MaxHeight);
       }
-
-      // 最大高度を保存 - これが重要
-      //if (flight && flight.maxHeight > 0) {
-      //  setMaxHeight(flight.maxHeight);
-      //}
 
       // 初期データを取得（最初のフレーム用）
       const initialData = flight.data[0];
@@ -1178,15 +1172,6 @@ const IntegratedRocketSimulator = () => {
       calculationCompleteRef.current = true;
     }
   }, [activeTab, preRocketSim.isInitialized]);
-
-  // 開発モードが有効な場合のみコンソールにログを出力（オプション）←←←←←←←←こいつを外すととりあえず発射できる！！！！！
-  //useEffect(() => {
-  //  // 初回レンダリング時、またはrocketSimが変更された時に初期計算を実行
-  //  if (activeTab === 'simulation') {
-  //    console.log('初期計算を実行します');
-  //    rocketSim.recalculateFlightPath();
-  //  }
-  //}, [rocketSim, activeTab]);
 
   const navigate = useNavigate();
   // ログアウト処理
