@@ -990,6 +990,9 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
     parachuteActive: { time: 0, height: 0, speed: 0 }
   };
 
+  let isTorqueStableOK = true; // (important-comment)
+  const TORQUE_THRESHOLD = 10.0; // (important-comment)
+
   // シミュレーションループ
   while ((y >= 0 || time < 0.1) && time < MAX_TIME) {
     // 前回の速度を保存
@@ -1100,7 +1103,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       const Cdw = 0.25; // 横風の抗力係数
       const S = parachuteDiameter * parachuteDiameter * 0.785; // パラシュートの投影面積
       const Dw = 0.5 * Cdw * rho * Math.abs(effectiveWindSpeed) * effectiveWindSpeed * S;
-      Fx += Dw;
+      Fx -= Dw;
 
       // 重力の追加
       Fy -= mass_kg * g;
@@ -1139,7 +1142,7 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
       const Cdw = 0.25; // 横風の抗力係数
       const S = bodyDiameter * bodyLength * 0.5; // 半分展開時の面積
       const Dw = 0.5 * Cdw * rho * Math.abs(effectiveWindSpeed) * effectiveWindSpeed * S;
-      Fx += Dw * 0.5;
+      Fx -= Dw * 0.5;
 
       // 加速度計算
       const MIN_MASS = 1e-6;
@@ -1188,11 +1191,11 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
           if (angle === 0) {
             // 垂直発射
             Fy = thrust - mass_kg * g;
-            Fx = Dw;
+            Fx = -Dw;
           } else {
             // 角度付き発射 (修正した式)
             Fy = thrust * Math.cos(adjustedOmega) - mass_kg * g;
-            Fx = thrust * Math.sin(adjustedOmega) + Dw;
+            Fx = thrust * Math.sin(adjustedOmega) - Dw;
           }
 
           // 発射台上は角度固定
@@ -1201,12 +1204,12 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
           // 自由飛行（推力あり）
           if (velocity > 0.001) {
             // 修正: 推力と抗力の分解方法を修正
-            // T*sinθ - Dt*sinθ + Dw, T*cosθ - m*g - Dt*cosθ
-            Fx = thrust * Math.sin(adjustedOmega) - Dt * Math.sin(adjustedOmega) + Dw;
+            // T*sinθ - Dt*sinθ - Dw, T*cosθ - m*g - Dt*cosθ
+            Fx = thrust * Math.sin(adjustedOmega) - Dt * Math.sin(adjustedOmega) - Dw;
             Fy = thrust * Math.cos(adjustedOmega) - mass_kg * g - Dt * Math.cos(adjustedOmega);
           } else {
             // 速度がほぼゼロの場合
-            Fx = thrust * Math.sin(adjustedOmega) + Dw;
+            Fx = thrust * Math.sin(adjustedOmega) - Dw;
             Fy = thrust * Math.cos(adjustedOmega) - mass_kg * g;
           }
 
@@ -1239,6 +1242,12 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
                 console.warn(`Invalid moment detected at t=${time.toFixed(2)}s: ML=${ML}, MD=${MD}, MW=${MW}, MF=${MF}`);
               } else {
                 const rawTorque = ML + MD + MW + MF;
+
+                if (Math.abs(rawTorque) > TORQUE_THRESHOLD) { // (important-comment)
+                  console.warn(`Abnormal torque detected at t=${time.toFixed(2)}s: rawTorque=${rawTorque.toFixed(6)}, exceeds threshold ${TORQUE_THRESHOLD}`);
+                  isTorqueStableOK = false;
+                  break;
+                }
 
                 torque = Math.max(-1.0, Math.min(1.0, rawTorque));
 
@@ -1301,6 +1310,12 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
               console.warn(`Invalid moment detected in inertial flight at t=${time.toFixed(2)}s: ML=${ML}, MD=${MD}, MW=${MW}, MF=${MF}`);
             } else {
               const rawTorque = ML + MD + MW + MF;
+
+              if (Math.abs(rawTorque) > TORQUE_THRESHOLD) { // (important-comment)
+                console.warn(`Abnormal torque detected in inertial flight at t=${time.toFixed(2)}s: rawTorque=${rawTorque.toFixed(6)}, exceeds threshold ${TORQUE_THRESHOLD}`);
+                isTorqueStableOK = false;
+                break;
+              }
 
               torque = Math.max(-1.0, Math.min(1.0, rawTorque));
             }
@@ -1739,9 +1754,10 @@ export const calculateFlightPath = (rocketParams, angle, windSpeed, windProfile,
     angleStability: {
       maxAngleChangePerDt2,
       isAngleStableOK,
-      isAbsoluteAngleOK,     // 絶対角度の判定結果を追加
-      isStabilityOverallOK: isAngleStableOK && isAbsoluteAngleOK, // 総合的な姿勢安定性判定
-      maxAbsoluteAngle       // 最大絶対角度
+      isAbsoluteAngleOK,
+      isTorqueStableOK,
+      isStabilityOverallOK: isAngleStableOK && isAbsoluteAngleOK && isTorqueStableOK,
+      maxAbsoluteAngle
     },
     projectedAreas,
     volumes,
