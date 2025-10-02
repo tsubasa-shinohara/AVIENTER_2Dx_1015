@@ -1838,7 +1838,7 @@ const SimulationTab = ({ rocketSim, preRocketSim, debugView, setDebugView, devMo
                 x={0}
                 y={550}
                 width={800}
-                height={graundHeight}
+                height={50}
                 fill="#4b5563"
               />
 
