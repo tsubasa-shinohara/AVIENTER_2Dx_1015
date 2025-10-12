@@ -755,7 +755,7 @@ const applyWindDirectionAngleLimit = (omega, windSpeed) => {
 };
 
 // 迎角変化によるフィンの舵モーメントを計算する関数
-const calculateFinMoment = (finHeight, finBaseWidth, finCount, velocity, omega, flightAngle, finMaterial, finCp, centerOfGravity) => {
+const calculateFinMoment = (finHeight, finBaseWidth, finSweepLength, finTipWidth, finCount, velocity, omega, flightAngle, finMaterial, finCp, noseHeight, bodyHeight, bodyWidth ,centerOfGravity) => {
   // --- 追加: 未定義入力のチェック ---
   if (omega == null || isNaN(omega)) omega = 0;
   if (flightAngle == null || isNaN(flightAngle)) flightAngle = 0;
@@ -770,7 +770,11 @@ const calculateFinMoment = (finHeight, finBaseWidth, finCount, velocity, omega, 
 
   // フィンの投影面積を再計算 (1枚あたり)
   const finHeight_m = mmToM(finHeight);
-  const finBaseWidth_m = mmToM(finBaseWidth);
+  const finSweepLength_m = mmToM(finSweepLength);
+  const finTipWidth_m = mmToM(finTipWidth);
+
+  // フィンの面積(m^2)
+  const finArea = ((finBaseWidth + finTipWidth) * 0.001) * (finHeight * 0.001) / 2;
 
   // 迎角を計算
   const angleOfAttack = omega - flightAngle; //const angleOfAttack = omega - flightAngle;
@@ -778,9 +782,9 @@ const calculateFinMoment = (finHeight, finBaseWidth, finCount, velocity, omega, 
   // 傾いたフィンの面積
   let finLeanArea;
   if (finCount === 3) {
-    finLeanArea = Math.abs(finHeight_m * (1.732 / 2) * finBaseWidth_m * Math.sin(angleOfAttack));
+    finLeanArea = Math.abs(finHeight_m * (1.732 / 2) * (finSweepLength_m + finTipWidth_m) * Math.sin(angleOfAttack) * finArea / ((finSweepLength_m + finTipWidth_m) * finHeight_m));
   } else {
-    finLeanArea = Math.abs(finHeight_m * finBaseWidth_m * Math.sin(angleOfAttack));
+    finLeanArea = Math.abs(finHeight_m * (finSweepLength_m + finTipWidth_m) * Math.sin(angleOfAttack) * finArea / ((finSweepLength_m + finTipWidth_m) * finHeight_m));
   }
 
   // フィン総面積（枚数分）
@@ -796,8 +800,22 @@ const calculateFinMoment = (finHeight, finBaseWidth, finCount, velocity, omega, 
   // モーメントアーム (m)
   const momentArm = mmToM(Math.abs(finCp_m - centerOfGravity_m));
 
+  // ボディのモーメント計算スタート（無理やり）
+  const noseHeight_m = mmToM(noseHeight);
+  const bodyHeight_m = mmToM(bodyHeight);
+  const bodyWidth_m = mmToM(bodyWidth);
+
+  // ノーズとボディの面積
+  const noseBodyArea = bodyWidth_m * (noseHeight_m + bodyHeight_m);
+
+  // ノーズとボディの中心位置
+  const momentArm_b = mmToM(Math.abs(((noseHeight_m + bodyHeight_m) / 2) - centerOfGravity_m));
+
+  // 抗力Dの計算 (ノーズとボディ)
+  const dragOfNoseBodyLean = cd * 0.5 * rho * velocity * velocity * noseBodyArea;
+
   // モーメントの絶対量の計算（Nm）
-  const momentMagnitude = Math.abs(dragOfFinLean * momentArm * Math.sign(angleOfAttack));
+  const momentMagnitude = Math.abs(((dragOfFinLean * momentArm) + (dragOfNoseBodyLean *  momentArm_b)) * Math.sign(angleOfAttack));
 
   // 符号の決定
   let finalMoment;
