@@ -33,6 +33,8 @@ import {
   ParameterSlider, DesignTab, AnalysisTab, SimulationTab
 } from './RocketUIComponents';
 
+import ExportTab from './RocketExport';
+
 // シミュレーションタブの事前計算のインポート
 import { usePreFlightRocketSim } from './RocketUIPreCalu'
 
@@ -1208,12 +1210,19 @@ const IntegratedRocketSimulator = () => {
         >
           飛行シミュレーション
         </button>
+        <button
+          className={`px-6 py-3 font-medium ${activeTab === 'export' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
+          onClick={() => handleTabChange('export')}
+        >
+          形状出力
+        </button>
       </div>
 
       <div>
         {activeTab === 'design' && <DesignTab rocketSim={rocketSim} />}
         {activeTab === 'analysis' && <AnalysisTab rocketSim={rocketSim} getSafeValue={getSafeValue} />}
         {activeTab === 'simulation' && <SimulationTab rocketSim={rocketSim} preRocketSim={preRocketSim} debugView={debugView} setDebugView={setDebugView} devMode={devMode} />}
+        {activeTab === 'export' && <ExportTab rocketSim={rocketSim} />}
       </div>
 
       {/* 開発モード表示 - 開発モード時のみ表示 */}
