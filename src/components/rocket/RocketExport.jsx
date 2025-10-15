@@ -15,7 +15,7 @@ const ExportTab = ({ rocketSim }) => {
       finCount
     } = rocketSim;
 
-    const scale = 10;
+    const scale = 1;
     const padding = 20;
     
     let adjustedFinTopY, adjustedFinBottomY;
@@ -118,9 +118,97 @@ const ExportTab = ({ rocketSim }) => {
     URL.revokeObjectURL(url);
   };
 
-  const previewSVG = () => {
-    const svgContent = generateFinSVG();
-    return svgContent;
+  const renderPreviewSVG = () => {
+    const {
+      finHeight,
+      finBaseWidth,
+      finTipWidth,
+      finSweepLength,
+      finThickness,
+      finCount
+    } = rocketSim;
+
+    const scale = 1;
+    const padding = 20;
+    
+    let adjustedFinTopY, adjustedFinBottomY;
+    
+    if (finSweepLength >= 0) {
+      adjustedFinTopY = finSweepLength;
+      adjustedFinBottomY = adjustedFinTopY + finTipWidth;
+    } else {
+      adjustedFinTopY = -Math.abs(finSweepLength);
+      adjustedFinBottomY = adjustedFinTopY + finTipWidth;
+    }
+
+    const finPath = `M 0 0
+                     L 0 ${finBaseWidth}
+                     L ${finHeight} ${adjustedFinBottomY}
+                     L ${finHeight} ${adjustedFinTopY}
+                     Z`;
+
+    const svgWidth = (finHeight + padding * 2) * scale;
+    const svgHeight = (Math.max(finBaseWidth, adjustedFinBottomY) + padding * 2) * scale;
+
+    return (
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        width={`${svgWidth}mm`}
+        height={`${svgHeight}mm`}
+        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+        style={{ maxWidth: '100%', height: 'auto' }}
+      >
+        <defs>
+          <style>{`
+            .fin-outline { 
+              fill: none; 
+              stroke: #000000; 
+              stroke-width: 0.1; 
+              vector-effect: non-scaling-stroke;
+            }
+            .dimension-text {
+              font-family: Arial, sans-serif;
+              font-size: 12px;
+              fill: #0000ff;
+            }
+          `}</style>
+        </defs>
+        
+        <g transform={`translate(${padding * scale}, ${padding * scale}) scale(${scale})`}>
+          <path className="fin-outline" d={finPath} />
+        </g>
+        
+        <g className="dimension-text">
+          <text 
+            x={padding * scale / 2} 
+            y={svgHeight / 2} 
+            textAnchor="middle" 
+            transform={`rotate(-90, ${padding * scale / 2}, ${svgHeight / 2})`}
+          >
+            フィン付け根幅: {finBaseWidth}mm
+          </text>
+          <text x={svgWidth / 2} y={svgHeight - 5} textAnchor="middle">
+            フィン高さ: {finHeight}mm
+          </text>
+          <text x={svgWidth - 50} y="20">
+            板厚: {finThickness}mm
+          </text>
+          <text x={svgWidth - 50} y="35">
+            翼端幅: {finTipWidth}mm
+          </text>
+          <text x={svgWidth - 50} y="50">
+            後退代: {finSweepLength}mm
+          </text>
+          <text x={svgWidth - 50} y="65">
+            枚数: {finCount}枚
+          </text>
+        </g>
+        
+        <text x="10" y={svgHeight - 10} className="dimension-text" fontSize="10">
+          AVIENTER 2D - Fin Template (1:1 scale)
+        </text>
+      </svg>
+    );
   };
 
   const handleTogglePremium = () => {
@@ -231,9 +319,9 @@ const ExportTab = ({ rocketSim }) => {
 
           <div className="border border-gray-300 rounded p-4 bg-white">
             <h4 className="font-semibold mb-2">プレビュー</h4>
-            <div className="bg-gray-100 p-4 rounded overflow-auto max-h-96">
+            <div className="bg-gray-100 p-4 rounded overflow-auto max-h-96 flex justify-center items-center">
               {isPremiumUser ? (
-                <div dangerouslySetInnerHTML={{ __html: previewSVG() }} />
+                renderPreviewSVG()
               ) : (
                 <div className="flex items-center justify-center h-64 text-gray-400">
                   <div className="text-center">
