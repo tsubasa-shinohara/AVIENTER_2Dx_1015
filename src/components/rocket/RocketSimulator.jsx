@@ -397,12 +397,9 @@ const useRocketSimulator = () => {
       finFlutterSpeedDisplay: formatSpeedValue(finFlutterSpeed),
       rocketParams
     };
-  }, [noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth, centerOfGravity,
+  }, [noseShape, noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth, centerOfGravity,
     pressureCenter, aerodynamicCenter, stabilityCenterOfPressure, staticMargins,
-    finHeight, finThickness, finMaterial, weight]);
-
-
-  console.log(calculations.rocketParams);
+    finHeight, finThickness, finMaterial, weight, finCount]);
 
   // 物理計算のための全パラメータをまとめる
   const simulationParams = useMemo(() => ({
@@ -617,8 +614,6 @@ const useRocketSimulator = () => {
   
   // リセット関数を強化
   const handleReset = useCallback(() => {
-    console.log('リセット処理開始');
-
     // アニメーションをキャンセル
     if (animationId) {
       cancelAnimationFrame(animationId);
@@ -658,8 +653,6 @@ const useRocketSimulator = () => {
     // ロケットスケールも設定
     const rocketScaleFactor = 0.03 * getMotorPowerFactor(selectedMotor);
     setRocketScale(rocketScaleFactor);
-
-    console.log('シミュレーションが完全にリセットされました。新しいスケール: ', stableScale);
   }, [animationId, flightResults, selectedMotor]);
 
   // ポップアップを閉じる関数
@@ -672,13 +665,6 @@ const useRocketSimulator = () => {
   }, [flightResults]);
 
   const handleLaunch = useCallback(() => {
-
-    if (isLaunched === true) {
-      console.log('すでにisLaunchedがtrueになってるよ!!!!!!!!');
-    } else {
-      console.log('打上げの計算が進んでるね。。。。');
-    }
-
     if (isLaunched) return;
 
     try {
@@ -732,17 +718,6 @@ const useRocketSimulator = () => {
 
       // 初期データを取得（最初のフレーム用）
       const initialData = flight.data[0];
-      console.log('初期フライトデータ：', initialData);
-      console.log(`最高到達高度: ${flight.maxHeight.toFixed(2)}m, 最高速度: ${flight.maxSpeed.toFixed(2)}m/s, 最大水平距離: ${flight.maxDistance.toFixed(2)}m`);
-      console.log(`最大フィンたわみ量: ${flight.maxFinDeflection.toFixed(4)}mm`);
-      console.log(`姿勢安定性: 最大角度変化量=${flight.angleStability.maxAngleChangePerDt2.toFixed(2)}°`);
-      // 絶対角度の判定結果も出力
-      console.log(`絶対角度安定性: 最大絶対角度=${flight.angleStability.maxAbsoluteAngle?.toFixed(2) || 0}°, 判定=${flight.angleStability.isAbsoluteAngleOK ? 'OK' : 'NG'}`);
-
-      // 着地予測情報をログ出力
-      if (flight.landing) {
-        console.log(`着地予測: 距離=${flight.landing.landingDistance.toFixed(2)}m, 時間=${flight.landing.timeToLanding.toFixed(2)}秒`);
-      }
 
       // 着地予測情報を状態に保存
       setLanding(flight.landing);
@@ -783,11 +758,6 @@ const useRocketSimulator = () => {
           // シミュレーションデータのインデックスを計算 - Math.maxを追加して負のインデックスを防止
           const timeIndex = Math.max(0, Math.min(Math.floor(elapsed / 0.02), flight.data.length - 1));
 
-          // 追加のデバッグログ - 100フレームごとに状態を記録
-          if (timeIndex % 100 === 0) {
-            console.log(`Animation frame: time=${elapsed.toFixed(2)}s, index=${timeIndex}, total=${flight.data.length}`);
-          }
-
           // データの安全性チェック
           if (timeIndex >= 0 && timeIndex < flight.data.length) {
             const currentData = flight.data[timeIndex];
@@ -820,8 +790,6 @@ const useRocketSimulator = () => {
                 setAnimationId(id);
               } else {
                 // アニメーション終了 - 最終フレームに到達した時だけ結果を表示
-                console.log('アニメーション完了: 最終インデックス到達');
-
                 // シミュレーションデータから最大値を直接計算（状態変数に依存せず確実に取得）
                 const maxHeight = Math.max(...flight.data.map(d => isNaN(d.height) ? 0 : d.height || 0));
                 const maxSpeed = Math.max(...flight.data.map(d => isNaN(d.speedMagnitude) ? 0 :
@@ -982,8 +950,6 @@ const useRocketSimulator = () => {
       // ロケットスケールをさらに小さく
       const baseRocketScale = 0.03;
       setRocketScale(baseRocketScale * powerFactor);
-
-      console.log(`パラメータ更新: モーター=${simulationParams.selectedMotor}, 高度=${flight.maxHeight.toFixed(1)}m, スケール=${finalScale.toFixed(2)}`);
     }
   }, [isLaunched, launchAngle, windSpeed, windProfile, simulationParams]);
 
@@ -995,8 +961,6 @@ const useRocketSimulator = () => {
 
     setTrajectoryScale(initialScale);
     setRocketScale(initialRocketScale);
-
-    console.log(`初期表示: スケール=${initialScale}, ロケットスケール=${initialRocketScale}`);
   }, []); // 空の依存配列で初回のみ実行
 
   // クリーンアップ
@@ -1146,12 +1110,8 @@ const IntegratedRocketSimulator = () => {
 
   // タブ切り替え処理関数
   const handleTabChange = useCallback((newTab) => {
-    console.log(`タブ切り替え処理: ${activeTab} -> ${newTab}`);
-
     // シミュレーションタブに切り替える場合、既存の計算結果を使用
     if (newTab === 'simulation' && activeTab !== 'simulation' && preRocketSim.isInitialized) {
-      console.log('シミュレーションタブに切り替わりました: 既存のprec_MaxHeightを使用します');
-      
       // ViewBoxの構築のみを行い、計算は行わない
       // 計算済みのフラグを設定
       calculationCompleteRef.current = true;
@@ -1164,12 +1124,6 @@ const IntegratedRocketSimulator = () => {
   // コンポーネントの初期マウント時にViewBoxの初期設定
   useEffect(() => {
     if (activeTab === 'simulation' && preRocketSim.isInitialized && !calculationCompleteRef.current) {
-      // 初期設定のみ行い、計算は行わない
-      console.log('シミュレーションタブ初期表示: ViewBoxの初期設定を行います');
-      
-      // 既存のprec_MaxHeightを使用
-      console.log(`既存のprec_MaxHeight: ${preRocketSim.prec_MaxHeight}m`);
-      
       // 計算済みフラグを設定
       calculationCompleteRef.current = true;
     }
