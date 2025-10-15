@@ -352,6 +352,13 @@ const useRocketSimulator = () => {
   }, [analysis, noseHeight, bodyHeight, finHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth]);
 
 
+  // rocketParamsを独立してメモ化（循環依存を防ぐため）
+  const rocketParams = useMemo(() => ({
+    noseShape, noseHeight, bodyHeight, bodyWidth, finHeight, finBaseWidth, finTipWidth,
+    finThickness, finSweepLength, finCount, finMaterial, centerOfGravity, weight
+  }), [noseShape, noseHeight, bodyHeight, bodyWidth, finHeight, finBaseWidth, finTipWidth,
+    finThickness, finSweepLength, finCount, finMaterial, centerOfGravity, weight]);
+
   // 計算結果のキャッシュ
   const calculations = useMemo(() => {
     // 機体本体の高さ
@@ -361,25 +368,23 @@ const useRocketSimulator = () => {
     // 全長は機体長 + フィン後端部分
     const totalHeight = actualRocketHeight + finExtension;
 
-    // 圧力中心位置と空力中心位置（新しい計算結果を使用）
-    const cp = pressureCenter?.centerOfPressure || (totalHeight * 0.7);
-    const ac = aerodynamicCenter?.aerodynamicCenter || (totalHeight * 0.65);
-    const stabilityCp = stabilityCenterOfPressure?.stabilityCenterOfPressure || (totalHeight * 0.6);
+    // 圧力中心位置と空力中心位置を直接計算
+    const cpData = calculateCenterOfPressure(rocketParams);
+    const acData = calculateAerodynamicCenter(rocketParams);
+    const stabilityCpData = calculateStabilityCenterOfPressure(rocketParams);
+    const marginsData = calculateStaticMargin(rocketParams);
+
+    const cp = cpData?.centerOfPressure || (totalHeight * 0.7);
+    const ac = acData?.aerodynamicCenter || (totalHeight * 0.65);
+    const stabilityCp = stabilityCpData?.stabilityCenterOfPressure || (totalHeight * 0.6);
 
     // 姿勢安定性マージン - 重心位置との距離
-    const standardMargin = staticMargins?.standardStaticMargin || ((cp - centerOfGravity) / bodyWidth);
-    const stabilityMargin = staticMargins?.stabilityStaticMargin || ((stabilityCp - centerOfGravity) / bodyWidth);
+    const standardMargin = marginsData?.standardStaticMargin || ((cp - centerOfGravity) / bodyWidth);
+    const stabilityMargin = marginsData?.stabilityStaticMargin || ((stabilityCp - centerOfGravity) / bodyWidth);
 
     // 新しい計算関数を使用してフィン限界速度を計算
-    const rocketParams = {
-      noseShape, noseHeight, bodyHeight, bodyWidth, finHeight, finBaseWidth, finTipWidth,
-      finThickness, finSweepLength, finCount, finMaterial, centerOfGravity, weight
-    };
-
     const finDivergenceSpeed = calculateFinDivergenceSpeed(rocketParams);
     const finFlutterSpeed = calculateFinFlutterSpeed(rocketParams);
-
-
 
     return {
       totalHeight: totalHeight,
@@ -397,9 +402,7 @@ const useRocketSimulator = () => {
       finFlutterSpeedDisplay: formatSpeedValue(finFlutterSpeed),
       rocketParams
     };
-  }, [noseShape, noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth, centerOfGravity,
-    pressureCenter, aerodynamicCenter, stabilityCenterOfPressure, staticMargins,
-    finHeight, finThickness, finMaterial, weight, finCount]);
+  }, [noseHeight, bodyHeight, finSweepLength, finTipWidth, finBaseWidth, bodyWidth, centerOfGravity, rocketParams]);
 
   // 物理計算のための全パラメータをまとめる
   const simulationParams = useMemo(() => ({
@@ -422,12 +425,12 @@ const useRocketSimulator = () => {
   useEffect(() => {
     if (!isInitialized) return;
 
-    const areas = calculateProjectedArea(calculations.rocketParams);
-    const volumeData = calculateVolume(calculations.rocketParams);
-    const cpData = calculateCenterOfPressure(calculations.rocketParams);
-    const acData = calculateAerodynamicCenter(calculations.rocketParams);
-    const stabilityCpData = calculateStabilityCenterOfPressure(calculations.rocketParams);
-    const margins = calculateStaticMargin(calculations.rocketParams);
+    const areas = calculateProjectedArea(rocketParams);
+    const volumeData = calculateVolume(rocketParams);
+    const cpData = calculateCenterOfPressure(rocketParams);
+    const acData = calculateAerodynamicCenter(rocketParams);
+    const stabilityCpData = calculateStabilityCenterOfPressure(rocketParams);
+    const margins = calculateStaticMargin(rocketParams);
 
     setProjectedAreas(areas);
     setVolumes(volumeData);
@@ -436,22 +439,7 @@ const useRocketSimulator = () => {
     setStabilityCenterOfPressure(stabilityCpData);
     setStaticMargins(margins);
 
-  }, [
-    isInitialized,
-    calculations.rocketParams.noseShape,
-    calculations.rocketParams.noseHeight,
-    calculations.rocketParams.bodyHeight,
-    calculations.rocketParams.bodyWidth,
-    calculations.rocketParams.finHeight,
-    calculations.rocketParams.finBaseWidth,
-    calculations.rocketParams.finTipWidth,
-    calculations.rocketParams.finThickness,
-    calculations.rocketParams.finSweepLength,
-    calculations.rocketParams.finMaterial,
-    calculations.rocketParams.finCount,
-    calculations.rocketParams.centerOfGravity,
-    calculations.rocketParams.weight
-  ]);
+  }, [isInitialized, rocketParams]);
 
   // 動的に計算結果を更新する
   useEffect(() => {
