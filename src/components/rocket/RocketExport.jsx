@@ -37,6 +37,8 @@ const ExportTab = ({ rocketSim }) => {
     const svgWidth = (finHeight + padding * 2) * scale;
     const svgHeight = (Math.max(finBaseWidth, adjustedFinBottomY) + padding * 2) * scale;
 
+    const textOffsetRight = Math.min(50, svgWidth * 0.3);
+
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" 
      width="${svgWidth}mm" 
@@ -58,7 +60,7 @@ const ExportTab = ({ rocketSim }) => {
       }
       .dimension-text {
         font-family: Arial, sans-serif;
-        font-size: 12px;
+        font-size: 3px;
         fill: #0000ff;
       }
     </style>
@@ -74,25 +76,25 @@ const ExportTab = ({ rocketSim }) => {
     <text x="${padding * scale / 2}" y="${svgHeight / 2}" text-anchor="middle" transform="rotate(-90, ${padding * scale / 2}, ${svgHeight / 2})">
       フィン付け根幅: ${finBaseWidth}mm
     </text>
-    <text x="${svgWidth / 2}" y="${svgHeight - 5}" text-anchor="middle">
+    <text x="${svgWidth / 2}" y="${svgHeight - 2}" text-anchor="middle">
       フィン高さ: ${finHeight}mm
     </text>
-    <text x="${svgWidth - 50}" y="20">
+    <text x="${svgWidth - textOffsetRight}" y="5">
       板厚: ${finThickness}mm
     </text>
-    <text x="${svgWidth - 50}" y="35">
+    <text x="${svgWidth - textOffsetRight}" y="10">
       翼端幅: ${finTipWidth}mm
     </text>
-    <text x="${svgWidth - 50}" y="50">
+    <text x="${svgWidth - textOffsetRight}" y="15">
       後退代: ${finSweepLength}mm
     </text>
-    <text x="${svgWidth - 50}" y="65">
+    <text x="${svgWidth - textOffsetRight}" y="20">
       枚数: ${finCount}枚
     </text>
   </g>
   
   <!-- 製作情報 -->
-  <text x="10" y="${svgHeight - 10}" class="dimension-text" font-size="10">
+  <text x="2" y="${svgHeight - 2}" class="dimension-text" font-size="2">
     AVIENTER 2D - Fin Template (1:1 scale)
   </text>
 </svg>`;
@@ -150,25 +152,26 @@ const ExportTab = ({ rocketSim }) => {
     const svgWidth = (finHeight + padding * 2) * scale;
     const svgHeight = (Math.max(finBaseWidth, adjustedFinBottomY) + padding * 2) * scale;
 
+    const textOffsetRight = Math.min(50, svgWidth * 0.3);
+
     return (
       <svg 
         xmlns="http://www.w3.org/2000/svg" 
         width={`${svgWidth}mm`}
         height={`${svgHeight}mm`}
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-        style={{ maxWidth: '100%', height: 'auto' }}
+        style={{ maxWidth: '100%', height: 'auto', border: '1px solid #ddd' }}
       >
         <defs>
           <style>{`
             .fin-outline { 
               fill: none; 
               stroke: #000000; 
-              stroke-width: 0.1; 
-              vector-effect: non-scaling-stroke;
+              stroke-width: 0.5; 
             }
             .dimension-text {
               font-family: Arial, sans-serif;
-              font-size: 12px;
+              font-size: 3px;
               fill: #0000ff;
             }
           `}</style>
@@ -187,24 +190,24 @@ const ExportTab = ({ rocketSim }) => {
           >
             フィン付け根幅: {finBaseWidth}mm
           </text>
-          <text x={svgWidth / 2} y={svgHeight - 5} textAnchor="middle">
+          <text x={svgWidth / 2} y={svgHeight - 2} textAnchor="middle">
             フィン高さ: {finHeight}mm
           </text>
-          <text x={svgWidth - 50} y="20">
+          <text x={svgWidth - textOffsetRight} y="5">
             板厚: {finThickness}mm
           </text>
-          <text x={svgWidth - 50} y="35">
+          <text x={svgWidth - textOffsetRight} y="10">
             翼端幅: {finTipWidth}mm
           </text>
-          <text x={svgWidth - 50} y="50">
+          <text x={svgWidth - textOffsetRight} y="15">
             後退代: {finSweepLength}mm
           </text>
-          <text x={svgWidth - 50} y="65">
+          <text x={svgWidth - textOffsetRight} y="20">
             枚数: {finCount}枚
           </text>
         </g>
         
-        <text x="10" y={svgHeight - 10} className="dimension-text" fontSize="10">
+        <text x="2" y={svgHeight - 2} className="dimension-text" fontSize="2">
           AVIENTER 2D - Fin Template (1:1 scale)
         </text>
       </svg>
