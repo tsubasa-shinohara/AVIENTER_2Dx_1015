@@ -1,5 +1,6 @@
 // UI関連のコンポーネント
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { NOSE_SHAPES, FIN_MATERIALS, WIND_PROFILES, PARACHUTE_SIZES, SVG_CONFIG } from './RocketConstants';
 import { formatFinDeflection, formatSpeedValue } from './RocketPhysics';
 import {
@@ -472,6 +473,7 @@ const ParameterSlider = ({
 
 // デザインタブコンポーネント
 const DesignTab = ({ rocketSim }) => {
+  const { t } = useTranslation();
   // 実際のロケット寸法を取得
   const defaultDimensions = { totalHeight: 0 };
   const dimensions = rocketSim?.getActualRocketDimensions ?
@@ -484,7 +486,7 @@ const DesignTab = ({ rocketSim }) => {
   if (!rocketSim || !rocketSim.noseShape) {
     return (
       <div className="bg-white rounded-lg shadow-lg p-6 mb-4 flex justify-center items-center">
-        <p className="text-gray-500">ロケットシミュレーションの読み込み中...</p>
+        <p className="text-gray-500">{t('common.initializing')}</p>
       </div>
     );
   }
@@ -492,10 +494,10 @@ const DesignTab = ({ rocketSim }) => {
     <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
       <div className="grid grid-cols-2 gap-6">
         <div>
-          <h3 className="text-xl font-bold mb-4">形状設計</h3>
+          <h3 className="text-xl font-bold mb-4">{t('design.title')}</h3>
 
           <div className="mb-6">
-            <h4 className="text-lg font-semibold mb-2">ノーズ設定</h4>
+            <h4 className="text-lg font-semibold mb-2">{t('design.noseShape')}</h4>
             <div className="flex space-x-4 mb-2">
               <label className="flex items-center">
                 <input
@@ -530,7 +532,7 @@ const DesignTab = ({ rocketSim }) => {
             </div>
 
             <ParameterSlider
-              label="長さ"
+              label={t('design.noseHeight')}
               value={rocketSim.noseHeight}
               min={25}
               max={150}
@@ -543,9 +545,9 @@ const DesignTab = ({ rocketSim }) => {
           </div>
 
           <div className="mb-6">
-            <h4 className="text-lg font-semibold mb-2">ボディ設定</h4>
+            <h4 className="text-lg font-semibold mb-2">{t('design.bodyHeight')}</h4>
             <ParameterSlider
-              label="長さ"
+              label={t('design.bodyHeight')}
               value={rocketSim.bodyHeight}
               min={100}
               max={500}
@@ -557,7 +559,7 @@ const DesignTab = ({ rocketSim }) => {
             />
 
             <ParameterSlider
-              label="直径"
+              label={t('design.bodyWidth')}
               value={rocketSim.bodyWidth}
               min={24}
               max={50}
@@ -570,10 +572,10 @@ const DesignTab = ({ rocketSim }) => {
           </div>
 
           <div>
-            <h4 className="text-lg font-semibold mb-2">フィン設定</h4>
+            <h4 className="text-lg font-semibold mb-2">{t('design.finMaterial')}</h4>
             {/* フィン枚数選択UI追加 */}
             <div className="mb-4">
-              <h5 className="font-medium mb-2">フィン枚数:</h5>
+              <h5 className="font-medium mb-2">{t('design.finCount')}:</h5>
               <div className="flex space-x-4 mb-2">
                 <label className="flex items-center">
                   <input
@@ -605,7 +607,7 @@ const DesignTab = ({ rocketSim }) => {
             </div>
 
             <ParameterSlider
-              label="翼幅"
+              label={t('design.finSpan')}
               value={rocketSim.finHeight}
               min={10}
               max={250}
@@ -617,7 +619,7 @@ const DesignTab = ({ rocketSim }) => {
             />
 
             <ParameterSlider
-              label="翼付け根長さ"
+              label={t('design.finRootLength')}
               value={rocketSim.finBaseWidth}
               min={10}
               max={150}
@@ -627,7 +629,7 @@ const DesignTab = ({ rocketSim }) => {
             />
 
             <ParameterSlider
-              label="翼端長"
+              label={t('design.finTipLength')}
               value={rocketSim.finTipWidth}
               min={0}
               max={75}
@@ -637,7 +639,7 @@ const DesignTab = ({ rocketSim }) => {
             />
 
             <ParameterSlider
-              label="厚さ"
+              label={t('design.finThickness')}
               value={rocketSim.finThickness}
               min={1}
               max={10}
@@ -651,7 +653,7 @@ const DesignTab = ({ rocketSim }) => {
             />
 
             <ParameterSlider
-              label="前縁後退代"
+              label={t('design.finSweptLength')}
               value={rocketSim.finSweepLength}
               min={-50}
               max={150}
