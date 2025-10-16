@@ -1,6 +1,8 @@
 // メインのシミュレーターコンポーネント
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '../LanguageSwitcher';
 // 定数とデータ定義のインポート
 import {
   SVG_CONFIG, MOTOR_THRUST_DATA, PARACHUTE_SIZES, FIN_MATERIALS,
@@ -1085,6 +1087,7 @@ const useRocketSimulator = () => {
 
 // 統合されたロケットシミュレーターコンポーネント
 const IntegratedRocketSimulator = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(UI_CONFIG.defaultTab);
   const [debugView, setDebugView] = useState(false);
   const [devMode, setDevMode] = useState(ENABLE_DEV_MODE);
@@ -1127,36 +1130,39 @@ const IntegratedRocketSimulator = () => {
   return (
     <div className="relative max-w-6xl mx-auto p-4">
       <h2 className="text-2xl font-bold mb-4">AVIENTER_2D</h2>
-      <button
-        onClick={handleLogout}
-        className="absolute top-4 right-4 px-4 py-2 border border-gray text-gray font-bold rounded hover:bg-white hover:text-black-300 transition z-10"
-      >
-        ログアウト
-      </button>
+      <div className="absolute top-4 right-4 flex gap-4 items-center z-10">
+        <LanguageSwitcher />
+        <button
+          onClick={handleLogout}
+          className="px-4 py-2 border border-gray text-gray font-bold rounded hover:bg-white hover:text-black-300 transition"
+        >
+          {t('simulation.logout')}
+        </button>
+      </div>
       <div className="flex border-b mb-6">
         <button
           className={`px-6 py-3 font-medium ${activeTab === 'design' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg`}
           onClick={() => handleTabChange('design')}
         >
-          形状設計
+          {t('tabs.design')}
         </button>
         <button
           className={`px-6 py-3 font-medium ${activeTab === 'analysis' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
           onClick={() => handleTabChange('analysis')}
         >
-          重量・空力特性
+          {t('tabs.analysis')}
         </button>
         <button
           className={`px-6 py-3 font-medium ${activeTab === 'simulation' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
           onClick={() => handleTabChange('simulation')}
         >
-          飛行シミュレーション
+          {t('tabs.simulation')}
         </button>
         <button
           className={`px-6 py-3 font-medium ${activeTab === 'export' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} rounded-t-lg ml-1`}
           onClick={() => handleTabChange('export')}
         >
-          形状出力
+          {t('tabs.export')}
         </button>
       </div>
 
